@@ -2,6 +2,8 @@
 
 Nền tảng trợ lý bán hàng đa doanh nghiệp bằng FastAPI, React, PostgreSQL, Redis và Google Gemini. Source hiện có luồng đăng ký/đăng nhập, cách ly tenant, chatbot, kho tài liệu PDF/DOCX/XLSX, worker bền qua restart, widget khách truy cập, hội thoại, lead, quota, đơn thanh toán SePay, kích hoạt subscription và trang super admin.
 
+Production Windows hiện tại: [https://seminar.bkpvp.top](https://seminar.bkpvp.top), đi qua Cloudflare Tunnel tới FastAPI chỉ bind trên localhost. Cấu hình một máy dùng SQLite WAL cho dữ liệu và quota bền; xem [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Khởi động nhanh trên Windows
 
 Nhấp đúp [run.bat](run.bat). Script tự chọn cách chạy:

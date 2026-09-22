@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 from httpx import AsyncClient
 
 from app.api.public_chat import get_gemini_service
-from app.core.redis import get_redis
+from app.core.redis import SqliteRateLimitStore, get_redis
 from app.main import app
 from tests.test_auth_and_tenants import register
 
@@ -22,6 +22,15 @@ class FakeGemini:
         assert question
         assert tone == "professional"
         return "Tôi chưa có thông tin chính xác trong tài liệu doanh nghiệp."
+
+
+async def test_sqlite_rate_limit_store_persists(tmp_path):
+    path = str(tmp_path / "rate-limits.db")
+    first = SqliteRateLimitStore(path)
+    assert await first.eval("", 1, "quota:test", 60) == 1
+    second = SqliteRateLimitStore(path)
+    assert await second.eval("", 1, "quota:test", 60) == 2
+    assert await second.ping() is True
 
 
 async def test_widget_uses_opaque_visitor_session(client: AsyncClient):

@@ -19,12 +19,14 @@ class Settings(BaseSettings):
     app_secret_key: SecretStr = SecretStr("development-only-change-this-key")
     app_public_url: str = "http://localhost:8080"
     frontend_origin: str = "http://localhost:5173"
+    app_domain: str = "localhost"
     access_token_minutes: int = Field(default=15, ge=5, le=120)
     refresh_token_days: int = Field(default=30, ge=1, le=90)
 
     database_url: str = "sqlite+aiosqlite:///./sales_assistant.db"
     redis_url: str = "redis://localhost:6379/0"
-    rate_limit_backend: Literal["redis", "memory"] = "redis"
+    rate_limit_backend: Literal["redis", "memory", "sqlite"] = "redis"
+    rate_limit_sqlite_path: Path = Path("../.runtime/rate-limits.db")
 
     gemini_api_key: SecretStr | None = None
     gemini_model: str | None = None
@@ -61,13 +63,17 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_backends(self):
-        if self.app_env == "production" and self.rate_limit_backend != "redis":
-            raise ValueError("RATE_LIMIT_BACKEND must be redis in production")
+        if self.app_env == "production" and self.rate_limit_backend == "memory":
+            raise ValueError("RATE_LIMIT_BACKEND=memory is not allowed in production")
         return self
 
     @property
     def cors_origins(self) -> list[str]:
         return [self.frontend_origin.rstrip("/"), self.app_public_url.rstrip("/")]
+
+    @property
+    def trusted_hosts(self) -> list[str]:
+        return [self.app_domain, "localhost", "127.0.0.1", "test"]
 
 
 @lru_cache

@@ -1,6 +1,6 @@
 from collections.abc import AsyncIterator
 
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -20,7 +20,21 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+engine_options: dict = {"pool_pre_ping": True}
+if settings.database_url.startswith("sqlite"):
+    engine_options["connect_args"] = {"timeout": 30}
+engine = create_async_engine(settings.database_url, **engine_options)
+
+
+if settings.database_url.startswith("sqlite"):
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def configure_sqlite(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 SessionFactory = async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
 
 

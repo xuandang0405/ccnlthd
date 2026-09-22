@@ -1,4 +1,6 @@
 import asyncio
+import sqlite3
+import threading
 import time
 from collections.abc import AsyncIterator
 from typing import Protocol
@@ -39,13 +41,82 @@ class InMemoryRedis:
         return None
 
 
+class SqliteRateLimitStore:
+    """Persistent, atomic quota store for a single Windows server instance."""
+
+    def __init__(self, path: str) -> None:
+        self._path = path
+        self._lock = threading.Lock()
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self._path, timeout=30)
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA busy_timeout=30000")
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS counters ("
+            "key TEXT PRIMARY KEY, value INTEGER NOT NULL, expires_at REAL NOT NULL)"
+        )
+        return connection
+
+    def _increment(self, key: str, ttl: int) -> int:
+        with self._lock:
+            connection = self._connect()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                now = time.time()
+                row = connection.execute(
+                    "SELECT value, expires_at FROM counters WHERE key = ?", (key,)
+                ).fetchone()
+                if row is None or float(row[1]) <= now:
+                    value = 1
+                    connection.execute(
+                        "INSERT INTO counters(key, value, expires_at) VALUES (?, ?, ?) "
+                        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+                        "expires_at=excluded.expires_at",
+                        (key, value, now + ttl),
+                    )
+                else:
+                    value = int(row[0]) + 1
+                    connection.execute(
+                        "UPDATE counters SET value = ? WHERE key = ?", (value, key)
+                    )
+                connection.execute("DELETE FROM counters WHERE expires_at <= ?", (now,))
+                connection.commit()
+                return value
+            finally:
+                connection.close()
+
+    async def eval(self, _script: str, _number_of_keys: int, key: str, ttl: int) -> int:
+        return await asyncio.to_thread(self._increment, key, ttl)
+
+    async def ping(self) -> bool:
+        def check() -> bool:
+            connection = self._connect()
+            try:
+                return connection.execute("SELECT 1").fetchone() == (1,)
+            finally:
+                connection.close()
+
+        return await asyncio.to_thread(check)
+
+    async def aclose(self) -> None:
+        return None
+
+
 _memory_redis = InMemoryRedis()
+_sqlite_stores: dict[str, SqliteRateLimitStore] = {}
 
 
 def create_redis_client() -> RedisLike:
     settings = get_settings()
     if settings.rate_limit_backend == "memory":
         return _memory_redis
+    if settings.rate_limit_backend == "sqlite":
+        path = str(settings.rate_limit_sqlite_path.resolve())
+        if path not in _sqlite_stores:
+            settings.rate_limit_sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+            _sqlite_stores[path] = SqliteRateLimitStore(path)
+        return _sqlite_stores[path]
     return Redis.from_url(settings.redis_url, decode_responses=True)
 
 
@@ -54,5 +125,5 @@ async def get_redis() -> AsyncIterator[RedisLike]:
     try:
         yield client
     finally:
-        if not isinstance(client, InMemoryRedis):
+        if not isinstance(client, (InMemoryRedis, SqliteRateLimitStore)):
             await client.aclose()

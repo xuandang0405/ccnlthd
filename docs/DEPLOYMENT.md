@@ -1,5 +1,19 @@
 # Triển khai trên máy cá nhân
 
+## Máy chủ Windows hiện tại
+
+Domain `seminar.bkpvp.top` dùng Cloudflare Tunnel chạy như Windows service và chuyển HTTPS tới `127.0.0.1:8000`. FastAPI phục vụ cả API lẫn frontend production build; database nghiệp vụ và quota SQLite chỉ bind nội bộ. Không cần mở PostgreSQL/Redis hoặc cài Docker cho cấu hình một máy này.
+
+Triển khai lại an toàn (tự backup SQLite trước khi build/migration):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\deployment\deploy-server.ps1
+```
+
+Các tiến trình server ghi PID/log trong `.runtime/`. `deployment/run-server.ps1` khởi động backend và hai worker; `deployment/stop-server.ps1` chỉ dừng tiến trình đã xác minh đúng executable/command line và đặt maintenance marker để supervisor không tự bật lại. Chạy `run-server.ps1` để bỏ marker và khởi động lại. Scheduled task `AI Sales Assistant Server` chạy supervisor sau khi đăng nhập và tự phục hồi tiến trình bị dừng. Scheduled task `AI Sales Assistant Backup` dùng SQLite online backup mỗi ngày, giữ 14 ngày. Cloudflare Tunnel phải tiếp tục ở trạng thái `Running / Automatic`.
+
+Vì tác vụ startup cấp user chỉ chạy sau khi tài khoản Windows đăng nhập, muốn server chạy trước đăng nhập cần mở PowerShell bằng quyền Administrator và đăng ký scheduled task/service tương ứng.
+
 Luồng dự kiến: Internet → router/firewall → Caddy (80/443) → frontend hoặc FastAPI; PostgreSQL/Redis không public.
 
 ## Điều kiện bên ngoài cần xác nhận

@@ -1,11 +1,14 @@
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api import (
@@ -21,7 +24,7 @@ from app.api import (
 )
 from app.core.config import get_settings
 from app.core.database import SessionFactory
-from app.core.redis import InMemoryRedis, create_redis_client
+from app.core.redis import InMemoryRedis, SqliteRateLimitStore, create_redis_client
 
 settings = get_settings()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -40,6 +43,7 @@ app = FastAPI(
     redoc_url="/redoc" if settings.app_env != "production" else None,
     lifespan=lifespan,
 )
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -78,6 +82,8 @@ async def request_context(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if settings.app_env == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     logging.getLogger("app.access").info(
         "request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
         request_id,
@@ -106,13 +112,16 @@ async def readiness():
     redis = create_redis_client()
     try:
         if await redis.ping():
-            components["redis"] = (
-                "memory (development only)" if isinstance(redis, InMemoryRedis) else "up"
-            )
+            if isinstance(redis, InMemoryRedis):
+                components["redis"] = "memory (development only)"
+            elif isinstance(redis, SqliteRateLimitStore):
+                components["redis"] = "sqlite (single-server mode)"
+            else:
+                components["redis"] = "up"
     except Exception as exc:
         logging.getLogger("app.health").warning("Redis readiness failed: %s", type(exc).__name__)
     finally:
-        if not isinstance(redis, InMemoryRedis):
+        if not isinstance(redis, (InMemoryRedis, SqliteRateLimitStore)):
             await redis.aclose()
     healthy = components["database"] == "up" and components["redis"] != "down"
     return JSONResponse(
@@ -135,3 +144,30 @@ app.include_router(telegram.router, prefix="/api/v1")
 @app.get("/api/v1/health", tags=["Monitoring"])
 async def report_compatible_health():
     return await readiness()
+
+
+frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+frontend_assets = frontend_dist / "assets"
+if frontend_assets.is_dir():
+    app.mount("/assets", StaticFiles(directory=frontend_assets), name="frontend-assets")
+
+
+@app.get("/", include_in_schema=False)
+async def frontend_index():
+    index = frontend_dist / "index.html"
+    if not index.is_file():
+        raise HTTPException(status_code=503, detail="Frontend chưa được build")
+    return FileResponse(index)
+
+
+@app.get("/{frontend_path:path}", include_in_schema=False)
+async def frontend_spa(frontend_path: str):
+    if frontend_path.startswith(("api/", "health/", "docs", "redoc", "openapi.json")):
+        raise HTTPException(status_code=404, detail="Không tìm thấy endpoint")
+    candidate = (frontend_dist / frontend_path).resolve()
+    if frontend_dist.resolve() in candidate.parents and candidate.is_file():
+        return FileResponse(candidate)
+    index = frontend_dist / "index.html"
+    if not index.is_file():
+        raise HTTPException(status_code=503, detail="Frontend chưa được build")
+    return FileResponse(index)

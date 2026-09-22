@@ -3,6 +3,9 @@ setlocal EnableExtensions EnableDelayedExpansion
 title AI Sales Assistant - Startup
 cd /d "%~dp0"
 
+findstr /B /C:"APP_ENV=production" "backend\.env" >nul 2>&1
+if not errorlevel 1 goto :server
+
 echo.
 echo ============================================================
 echo              AI SALES ASSISTANT - STARTUP
@@ -98,6 +101,15 @@ echo ban dien credentials that vao file .env va chay lai run.bat.
 echo.
 start "" "http://localhost"
 echo Ban co the dong cua so nay. Cac container se tiep tuc chay nen.
+pause
+exit /b 0
+
+:server
+echo [INFO] Khoi dong che do server production...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\run-server.ps1"
+if errorlevel 1 goto :failed
+start "" "https://seminar.bkpvp.top"
+echo Server: https://seminar.bkpvp.top
 pause
 exit /b 0
 
