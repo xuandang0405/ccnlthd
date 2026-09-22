@@ -2,6 +2,10 @@
 
 ## Docker Compose (khuyến nghị)
 
+### Chạy tự động trên Windows
+
+Nhấp đúp `run.bat` ở thư mục gốc. Script kiểm tra Docker, tự tạo `.env` an toàn nếu chưa có, khởi động toàn bộ service và chỉ mở website sau khi readiness check thành công. Script không ghi đè `.env` đã tồn tại và không xóa dữ liệu/volume.
+
 1. Cài Docker Desktop với WSL2 và bật tự khởi động cùng Windows.
 2. Sao chép `.env.example` thành `.env`.
 3. Tạo `APP_SECRET_KEY` ngẫu nhiên tối thiểu 32 ký tự và mật khẩu PostgreSQL riêng.

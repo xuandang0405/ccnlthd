@@ -6,6 +6,8 @@ Nền tảng trợ lý bán hàng đa doanh nghiệp bằng FastAPI, React, Post
 
 Yêu cầu cho production-like: Docker Desktop/Engine có Compose, domain trỏ đúng máy và cổng 80/443 đi được từ Internet.
 
+Trên Windows, cách đơn giản nhất là nhấp đúp [run.bat](run.bat). File sẽ tự tạo `.env` với secret ngẫu nhiên ở lần chạy đầu, build toàn bộ stack, chờ health check và mở website tại `http://localhost`.
+
 ```powershell
 Copy-Item .env.example .env
 # Điền secret, mật khẩu PostgreSQL, domain và các tích hợp thật.
