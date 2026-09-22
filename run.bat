@@ -11,24 +11,17 @@ echo.
 
 where docker >nul 2>&1
 if errorlevel 1 (
-    echo [LOI] Khong tim thay Docker.
-    echo Hay cai Docker Desktop, bat WSL 2 va khoi dong Docker Desktop.
-    echo Tai Docker Desktop: https://www.docker.com/products/docker-desktop/
-    goto :failed
+    goto :local
 )
 
 docker compose version >nul 2>&1
 if errorlevel 1 (
-    echo [LOI] Docker Compose khong kha dung.
-    echo Hay cap nhat Docker Desktop roi chay lai file nay.
-    goto :failed
+    goto :local
 )
 
 docker info >nul 2>&1
 if errorlevel 1 (
-    echo [LOI] Docker Desktop chua chay hoac chua san sang.
-    echo Hay mo Docker Desktop, doi den khi hien Engine running, sau do chay lai.
-    goto :failed
+    goto :local
 )
 
 if not exist ".env" (
@@ -105,6 +98,14 @@ echo ban dien credentials that vao file .env va chay lai run.bat.
 echo.
 start "" "http://localhost"
 echo Ban co the dong cua so nay. Cac container se tiep tuc chay nen.
+pause
+exit /b 0
+
+:local
+echo [INFO] Docker khong kha dung. Chuyen sang che do Windows khong Docker...
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\run-local.ps1"
+if errorlevel 1 goto :failed
 pause
 exit /b 0
 

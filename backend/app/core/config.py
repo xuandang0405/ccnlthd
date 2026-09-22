@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./sales_assistant.db"
     redis_url: str = "redis://localhost:6379/0"
+    rate_limit_backend: Literal["redis", "memory"] = "redis"
 
     gemini_api_key: SecretStr | None = None
     gemini_model: str | None = None
@@ -40,6 +41,7 @@ class Settings(BaseSettings):
     sepay_auth_mode: str | None = None
     sepay_webhook_secret: SecretStr | None = None
     sepay_api_key: SecretStr | None = None
+    sepay_hmac_tolerance_seconds: int = Field(default=300, ge=30, le=900)
     payment_bank_code: str | None = None
     payment_account_number: str | None = None
     payment_account_name: str | None = None
@@ -56,6 +58,12 @@ class Settings(BaseSettings):
         if info.data.get("app_env") == "production" and len(value.get_secret_value()) < 32:
             raise ValueError("APP_SECRET_KEY must contain at least 32 characters in production")
         return value
+
+    @model_validator(mode="after")
+    def validate_production_backends(self):
+        if self.app_env == "production" and self.rate_limit_backend != "redis":
+            raise ValueError("RATE_LIMIT_BACKEND must be redis in production")
+        return self
 
     @property
     def cors_origins(self) -> list[str]:

@@ -5,7 +5,7 @@ Ngày chạy local: 2026-09-22, Windows, Python 3.14.7 cho test (source yêu c�
 ## Đã chạy thành công
 
 - Ruff: không lỗi.
-- Pytest: 10 passed; gồm auth/refresh/reset, cross-tenant chatbot, upload độc hại/hợp lệ, Gemini thiếu cấu hình báo lỗi thật, widget session/chat, lead/hội thoại, SePay auth/idempotency/subscription, Telegram challenge và super-admin authorization.
+- Pytest: 11 passed; gồm auth/refresh/reset, cross-tenant chatbot, upload độc hại/hợp lệ, Gemini thiếu cấu hình báo lỗi thật, widget session/chat và rate-limit headers, lead/hội thoại, SePay API Key/HMAC/idempotency/subscription, Telegram challenge và super-admin authorization.
 - Coverage: 72%; worker/parser/notification worker có nhánh chưa cover.
 - Frontend ESLint và TypeScript/Vite production build: pass.
 - `npm audit --omit=dev`: 0 vulnerability được báo.

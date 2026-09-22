@@ -2,8 +2,9 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from redis.asyncio import Redis
 from redis.exceptions import RedisError
+
+from app.core.redis import RedisLike
 
 VIETNAM = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -35,7 +36,7 @@ def next_midnight_vietnam(now: datetime | None = None) -> datetime:
 
 
 class QuotaService:
-    def __init__(self, redis: Redis):
+    def __init__(self, redis: RedisLike):
         self.redis = redis
 
     async def consume_daily(self, organization_id: str, limit: int | None) -> QuotaResult:

@@ -4,13 +4,12 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from redis.asyncio import Redis
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.redis import get_redis
+from app.core.redis import RedisLike, get_redis
 from app.core.security import digest_token, ensure_utc
 from app.integrations.gemini import GeminiService, GeminiServiceError
 from app.models.entities import (
@@ -215,9 +214,10 @@ async def retrieve_context(
 async def send_message(
     public_id: UUID,
     payload: PublicChatRequest,
+    response: Response,
     visitor_token: str = Header(alias="X-Visitor-Token"),
     db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis),
+    redis: RedisLike = Depends(get_redis),
     gemini: GeminiService = Depends(get_gemini_service),
 ):
     session, chatbot, conversation = await verified_session(db, public_id, visitor_token)
@@ -225,7 +225,11 @@ async def send_message(
     try:
         visitor_requests = await quota.consume_visitor_rate(str(session.id))
         if visitor_requests > 30:
-            raise HTTPException(status_code=429, detail="Bạn đang gửi tin nhắn quá nhanh")
+            raise HTTPException(
+                status_code=429,
+                detail="Bạn đang gửi tin nhắn quá nhanh",
+                headers={"Retry-After": "60"},
+            )
         plan = (
             await db.execute(
                 select(Plan)
@@ -254,8 +258,21 @@ async def send_message(
         raise HTTPException(
             status_code=429,
             detail="Doanh nghiệp đã sử dụng hết quota chat hôm nay",
-            headers={"Retry-After": str(retry_after)},
+            headers={
+                "Retry-After": str(retry_after),
+                "X-RateLimit-Limit": str(result.limit),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(int(result.reset_at.timestamp())),
+            },
         )
+
+    response.headers["X-RateLimit-Limit"] = (
+        str(result.limit) if result.limit is not None else "unlimited"
+    )
+    response.headers["X-RateLimit-Remaining"] = (
+        str(result.remaining) if result.remaining is not None else "unlimited"
+    )
+    response.headers["X-RateLimit-Reset"] = str(int(result.reset_at.timestamp()))
 
     context, sources = await retrieve_context(
         db, chatbot.organization_id, chatbot.id, payload.message

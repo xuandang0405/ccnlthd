@@ -46,6 +46,7 @@ async def list_documents(
 
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post("/upload", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_document(
     file: UploadFile = File(),
     context: TenantContext = Depends(get_tenant_context),

@@ -1,11 +1,14 @@
+import hashlib
+import hmac
 import json
 import re
 import secrets
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -159,13 +162,40 @@ async def get_order(
     return order
 
 
-def authenticate_sepay(authorization: str | None) -> None:
+async def authenticate_sepay(
+    request: Request,
+    authorization: str | None,
+    signature: str | None,
+    timestamp: str | None,
+) -> None:
     settings = get_settings()
-    if (settings.sepay_auth_mode or "").upper() != "API_KEY" or settings.sepay_api_key is None:
-        raise HTTPException(status_code=503, detail="Webhook SePay chưa được cấu hình an toàn")
-    expected = f"Apikey {settings.sepay_api_key.get_secret_value()}"
-    if not authorization or not secrets.compare_digest(authorization, expected):
+    mode = (settings.sepay_auth_mode or "").upper()
+    if mode == "API_KEY" and settings.sepay_api_key is not None:
+        expected = f"Apikey {settings.sepay_api_key.get_secret_value()}"
+        if authorization and secrets.compare_digest(authorization, expected):
+            return
         raise HTTPException(status_code=401, detail="Webhook không được xác thực")
+    if mode in {"HMAC", "HMAC_SHA256", "HMAC-SHA256"} and settings.sepay_webhook_secret:
+        if not signature or not timestamp:
+            raise HTTPException(status_code=401, detail="Thiếu chữ ký webhook SePay")
+        try:
+            signed_at = int(timestamp)
+        except ValueError as exc:
+            raise HTTPException(status_code=401, detail="Timestamp webhook không hợp lệ") from exc
+        if abs(int(time.time()) - signed_at) > settings.sepay_hmac_tolerance_seconds:
+            raise HTTPException(status_code=401, detail="Webhook đã quá thời hạn xác thực")
+        raw_body = await request.body()
+        signed_payload = timestamp.encode() + b"." + raw_body
+        digest = hmac.new(
+            settings.sepay_webhook_secret.get_secret_value().encode(),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        expected = f"sha256={digest}"
+        if secrets.compare_digest(signature, expected):
+            return
+        raise HTTPException(status_code=401, detail="Chữ ký webhook không hợp lệ")
+    raise HTTPException(status_code=503, detail="Webhook SePay chưa được cấu hình an toàn")
 
 
 def extract_order_code(payload: SePayWebhookPayload) -> str | None:
@@ -177,12 +207,21 @@ def extract_order_code(payload: SePayWebhookPayload) -> str | None:
 
 
 @router.post("/webhooks/sepay", response_model=WebhookAcknowledgement)
+@router.post("/payment/seepay-webhook", response_model=WebhookAcknowledgement)
 async def sepay_webhook(
+    request: Request,
     payload: SePayWebhookPayload,
     authorization: Annotated[str | None, Header()] = None,
+    x_sepay_signature: Annotated[str | None, Header()] = None,
+    x_sepay_timestamp: Annotated[str | None, Header()] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    authenticate_sepay(authorization)
+    await authenticate_sepay(
+        request,
+        authorization,
+        x_sepay_signature,
+        x_sepay_timestamp,
+    )
     provider_id = str(payload.id)
     if await db.scalar(
         select(Transaction.id).where(

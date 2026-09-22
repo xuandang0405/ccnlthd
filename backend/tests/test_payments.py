@@ -1,7 +1,13 @@
+import hashlib
+import hmac
+import json
+import time
 from uuid import UUID
 
+from pydantic import SecretStr
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.database import SessionFactory
 from app.models.entities import Plan, Subscription, Transaction
 from tests.test_auth_and_tenants import register
@@ -66,3 +72,40 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_activates_pro(clien
         )
         assert active_plan is not None
         assert active_plan.code == "PRO"
+
+
+async def test_sepay_hmac_alias_verifies_raw_body(client):
+    settings = get_settings()
+    previous_mode = settings.sepay_auth_mode
+    previous_secret = settings.sepay_webhook_secret
+    settings.sepay_auth_mode = "HMAC_SHA256"
+    settings.sepay_webhook_secret = SecretStr("test-hmac-secret")
+    payload = {
+        "id": 123456,
+        "gateway": "Test Bank",
+        "transactionDate": "2026-09-22 10:00:00",
+        "accountNumber": "123456789",
+        "content": "Khong co ma don hang",
+        "transferType": "in",
+        "transferAmount": 1000,
+        "referenceCode": "REF-HMAC",
+    }
+    raw_body = json.dumps(payload, separators=(",", ":")).encode()
+    timestamp = str(int(time.time()))
+    signature = "sha256=" + hmac.new(
+        b"test-hmac-secret", timestamp.encode() + b"." + raw_body, hashlib.sha256
+    ).hexdigest()
+    try:
+        response = await client.post(
+            "/api/v1/payment/seepay-webhook",
+            content=raw_body,
+            headers={
+                "Content-Type": "application/json",
+                "X-SePay-Signature": signature,
+                "X-SePay-Timestamp": timestamp,
+            },
+        )
+        assert response.status_code == 200, response.text
+    finally:
+        settings.sepay_auth_mode = previous_mode
+        settings.sepay_webhook_secret = previous_secret

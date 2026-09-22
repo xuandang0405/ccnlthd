@@ -2,11 +2,16 @@
 
 Nền tảng trợ lý bán hàng đa doanh nghiệp bằng FastAPI, React, PostgreSQL, Redis và Google Gemini. Source hiện có luồng đăng ký/đăng nhập, cách ly tenant, chatbot, kho tài liệu PDF/DOCX/XLSX, worker bền qua restart, widget khách truy cập, hội thoại, lead, quota, đơn thanh toán SePay, kích hoạt subscription và trang super admin.
 
-## Khởi động nhanh
+## Khởi động nhanh trên Windows
 
-Yêu cầu cho production-like: Docker Desktop/Engine có Compose, domain trỏ đúng máy và cổng 80/443 đi được từ Internet.
+Nhấp đúp [run.bat](run.bat). Script tự chọn cách chạy:
 
-Trên Windows, cách đơn giản nhất là nhấp đúp [run.bat](run.bat). File sẽ tự tạo `.env` với secret ngẫu nhiên ở lần chạy đầu, build toàn bộ stack, chờ health check và mở website tại `http://localhost`.
+- Có Docker đang hoạt động: chạy stack PostgreSQL + Redis + Caddy tại `http://localhost`.
+- Không có Docker: chạy trực tiếp bằng Python + Node, SQLite và quota trong bộ nhớ tại `http://127.0.0.1:5173`.
+
+Chế độ không Docker cần Python 3.12+ và Node.js 20+. Script tự tạo virtual environment, cài dependency khi thiếu, migration database, chạy hai worker và mở trình duyệt. Đây là chế độ development/demo; production vẫn cần PostgreSQL, Redis thật và HTTPS.
+
+Để triển khai production-like bằng Docker:
 
 ```powershell
 Copy-Item .env.example .env
@@ -17,13 +22,13 @@ docker compose ps
 
 Backend tự chạy `alembic upgrade head`. Truy cập `https://APP_DOMAIN/`; health tại `/health/live` và `/health/ready`.
 
-Development không Docker được mô tả tại [docs/INSTALLATION.md](docs/INSTALLATION.md). API, database, bảo mật và vận hành nằm trong thư mục `docs/`.
+Chi tiết cài đặt không Docker nằm tại [docs/INSTALLATION.md](docs/INSTALLATION.md). Đối chiếu với báo cáo mới nằm tại [docs/REPORT_ALIGNMENT.md](docs/REPORT_ALIGNMENT.md).
 
 ## Những gì chưa được xác minh trên máy này
 
 - Gemini thật: thiếu `GEMINI_API_KEY` và `GEMINI_MODEL` được tài khoản cho phép.
 - Telegram thật: có luồng challenge xác minh destination và worker retry hữu hạn, nhưng chưa có Bot Token/destination thật để kiểm chứng gửi.
-- SePay thật/VietQR: chưa có API key, thông tin ngân hàng và số tiền Pro thật; chỉ luồng webhook API Key được kiểm thử tự động.
+- SePay thật/VietQR: chưa có API key/HMAC secret, thông tin ngân hàng và số tiền Pro thật; cả xác thực API Key lẫn HMAC đã có kiểm thử tự động nhưng chưa gọi tài khoản thật.
 - Docker Compose, PostgreSQL, Redis, HTTPS, restart, backup/restore: Docker chưa có trên máy khi kiểm tra.
 - Truy cập Internet: chưa có domain, xác nhận IP public/CGNAT, DNS hoặc port forwarding.
 

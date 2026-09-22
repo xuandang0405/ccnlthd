@@ -54,6 +54,9 @@ async def test_widget_uses_opaque_visitor_session(client: AsyncClient):
         )
         assert message.status_code == 200, message.text
         assert "chưa có thông tin chính xác" in message.json()["reply"]
+        assert message.headers["X-RateLimit-Limit"] == "20"
+        assert message.headers["X-RateLimit-Remaining"] == "19"
+        assert "X-RateLimit-Reset" in message.headers
 
         lead = await client.post(
             f"/api/v1/public/chat/{public_id}/leads",

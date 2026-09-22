@@ -6,7 +6,6 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from redis.asyncio import Redis
 from sqlalchemy import text
 
 from app.api import (
@@ -22,6 +21,7 @@ from app.api import (
 )
 from app.core.config import get_settings
 from app.core.database import SessionFactory
+from app.core.redis import InMemoryRedis, create_redis_client
 
 settings = get_settings()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -53,7 +53,13 @@ app.add_middleware(
         "X-Visitor-Token",
         "X-Widget-Origin",
     ],
-    expose_headers=["X-Request-ID"],
+    expose_headers=[
+        "X-Request-ID",
+        "X-RateLimit-Limit",
+        "X-RateLimit-Remaining",
+        "X-RateLimit-Reset",
+        "Retry-After",
+    ],
 )
 
 
@@ -97,15 +103,18 @@ async def readiness():
         components["database"] = "up"
     except Exception as exc:
         logging.getLogger("app.health").warning("Database readiness failed: %s", type(exc).__name__)
-    redis = Redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1)
+    redis = create_redis_client()
     try:
         if await redis.ping():
-            components["redis"] = "up"
+            components["redis"] = (
+                "memory (development only)" if isinstance(redis, InMemoryRedis) else "up"
+            )
     except Exception as exc:
         logging.getLogger("app.health").warning("Redis readiness failed: %s", type(exc).__name__)
     finally:
-        await redis.aclose()
-    healthy = all(value == "up" for value in components.values())
+        if not isinstance(redis, InMemoryRedis):
+            await redis.aclose()
+    healthy = components["database"] == "up" and components["redis"] != "down"
     return JSONResponse(
         status_code=200 if healthy else 503,
         content={"status": "ready" if healthy else "not_ready", "components": components},
@@ -121,3 +130,8 @@ app.include_router(payments.router, prefix="/api/v1")
 app.include_router(operations.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(telegram.router, prefix="/api/v1")
+
+
+@app.get("/api/v1/health", tags=["Monitoring"])
+async def report_compatible_health():
+    return await readiness()

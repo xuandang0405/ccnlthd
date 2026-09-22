@@ -21,6 +21,7 @@ test-results/
 *.db
 *.db-shm
 *.db-wal
+.runtime/
 *.pem
 *.key
 *.p12
