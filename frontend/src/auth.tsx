@@ -1,12 +1,12 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, configureApi } from "./services/api";
+import { ApiError, api, configureApi } from "./services/api";
 import type { CurrentUser, Tokens } from "./types";
 
 type AuthContextValue = {
   user: CurrentUser | null;
   organizationId: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  login: (email: string, password: string) => Promise<CurrentUser>;
+  register: (payload: RegisterPayload) => Promise<CurrentUser>;
   logout: () => Promise<void>;
 };
 
@@ -44,6 +44,35 @@ function clearSession() {
   document.cookie = `${SESSION_KEY}=; Path=/; Max-Age=0; SameSite=Strict`;
 }
 
+async function resolveSession(next: Tokens) {
+  configureApi(next.access_token, null);
+  const current = await api<CurrentUser>("/auth/me");
+  return { current, organizationId: current.organizations[0]?.id ?? null };
+}
+
+async function recoverSession(fallback: Tokens, forceRefresh = false) {
+  const run = async () => {
+    const latest = readSavedSession() ?? fallback;
+    const anotherTabAlreadyRefreshed = latest.refresh_token !== fallback.refresh_token;
+    if (!forceRefresh || anotherTabAlreadyRefreshed) {
+      try {
+        const resolved = await resolveSession(latest);
+        return { tokens: latest, ...resolved };
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 401) throw error;
+      }
+    }
+    configureApi(null, null);
+    const next = await api<Tokens>("/auth/refresh", { method: "POST", body: { refresh_token: latest.refresh_token } });
+    const resolved = await resolveSession(next);
+    // Save before releasing the cross-tab lock so other tabs see the rotated token.
+    saveSession(next);
+    return { tokens: next, ...resolved };
+  };
+  if (navigator.locks) return navigator.locks.request(`${SESSION_KEY}-refresh`, run);
+  return run();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [tokens, setTokens] = useState<Tokens | null>(null);
@@ -56,17 +85,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const saved = readSavedSession();
       if (!saved) { if (active) setIsLoading(false); return; }
       try {
-        configureApi(saved.access_token, null);
-        const current = await api<CurrentUser>("/auth/me");
+        let next = saved;
+        let resolved;
+        try {
+          resolved = await resolveSession(next);
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 401) throw error;
+          const recovered = await recoverSession(saved);
+          next = recovered.tokens;
+          resolved = recovered;
+        }
         if (!active) return;
-        const org = current.organizations[0]?.id ?? null;
-        configureApi(saved.access_token, org);
-        setTokens(saved);
-        setUser(current);
-        setOrganizationId(org);
-      } catch {
-        clearSession();
-        configureApi(null, null);
+        configureApi(next.access_token, resolved.organizationId);
+        saveSession(next);
+        setTokens(next);
+        setUser(resolved.current);
+        setOrganizationId(resolved.organizationId);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          clearSession();
+          configureApi(null, null);
+        } else {
+          // Keep the refresh token during a temporary server outage so a reload can recover.
+          configureApi(saved.access_token, null);
+        }
       } finally {
         if (active) setIsLoading(false);
       }
@@ -75,25 +117,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    if (!tokens) return;
+    const refreshIn = Math.max(0, new Date(tokens.expires_at).getTime() - Date.now() - 60_000);
+    const timer = window.setTimeout(async () => {
+      try {
+        const recovered = await recoverSession(tokens, true);
+        const next = recovered.tokens;
+        const resolved = recovered;
+        configureApi(next.access_token, resolved.organizationId);
+        saveSession(next);
+        setTokens(next);
+        setUser(resolved.current);
+        setOrganizationId(resolved.organizationId);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          configureApi(null, null);
+          clearSession();
+          setTokens(null);
+          setUser(null);
+          setOrganizationId(null);
+        } else {
+          // A temporary outage must not discard the still-valid in-memory session.
+          configureApi(tokens.access_token, organizationId);
+        }
+      }
+    }, refreshIn);
+    return () => window.clearTimeout(timer);
+  }, [tokens, organizationId]);
+
   async function acceptTokens(next: Tokens) {
-    configureApi(next.access_token, null);
-    const current = await api<CurrentUser>("/auth/me");
-    const org = current.organizations[0]?.id ?? null;
+    const { current, organizationId: org } = await resolveSession(next);
     configureApi(next.access_token, org);
     saveSession(next);
     setTokens(next);
     setUser(current);
     setOrganizationId(org);
+    return current;
   }
 
   async function login(email: string, password: string) {
     const next = await api<Tokens>("/auth/login", { method: "POST", body: { email, password } });
-    await acceptTokens(next);
+    return acceptTokens(next);
   }
 
   async function register(payload: RegisterPayload) {
     const next = await api<Tokens>("/auth/register", { method: "POST", body: payload });
-    await acceptTokens(next);
+    return acceptTokens(next);
   }
 
   async function logout() {

@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, Bot } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
 import { useAuth } from "../auth";
 import { api } from "../services/api";
@@ -26,9 +26,10 @@ function Shell({ title, subtitle, children }: { title: string; subtitle: string;
 const inputClass = "mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-100";
 
 export function LoginPage() {
-  const { login } = useAuth(); const navigate = useNavigate(); const [serverError, setServerError] = useState("");
+  const { login, user } = useAuth(); const navigate = useNavigate(); const [serverError, setServerError] = useState("");
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
-  const submit = handleSubmit(async (data) => { try { setServerError(""); await login(data.email, data.password); navigate("/app"); } catch (error) { setServerError(error instanceof Error ? error.message : "Đăng nhập thất bại"); } });
+  const submit = handleSubmit(async (data) => { try { setServerError(""); const current = await login(data.email, data.password); navigate(current.is_super_admin ? "/admin" : "/app", { replace: true }); } catch (error) { setServerError(error instanceof Error ? error.message : "Đăng nhập thất bại"); } });
+  if (user) return <Navigate to={user.is_super_admin ? "/admin" : "/app"} replace/>;
   return <Shell title="Chào mừng trở lại" subtitle="Đăng nhập để quản lý trợ lý AI của doanh nghiệp."><form onSubmit={submit} className="mt-8 space-y-5"><label className="block text-sm font-semibold">Email<input {...register("email")} className={inputClass} autoComplete="email"/></label>{errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}<label className="block text-sm font-semibold">Mật khẩu<input type="password" {...register("password")} className={inputClass} autoComplete="current-password"/></label><div className="text-right"><Link to="/forgot-password" className="text-sm font-bold text-blue-700">Quên mật khẩu?</Link></div>{serverError && <div role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{serverError}</div>}<button disabled={isSubmitting} className="w-full rounded-xl bg-blue-600 px-5 py-3 font-bold text-white disabled:opacity-60">{isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}</button><p className="text-center text-sm text-slate-600">Chưa có tài khoản? <Link className="font-bold text-blue-700" to="/register">Đăng ký miễn phí</Link></p></form></Shell>;
 }
 

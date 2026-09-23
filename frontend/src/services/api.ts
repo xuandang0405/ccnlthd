@@ -10,6 +10,21 @@ export function configureApi(token: string | null, orgId: string | null) {
 
 type ApiOptions = Omit<RequestInit, "body"> & { body?: unknown };
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function request(input: RequestInfo | URL, init: RequestInit) {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new Error("Không thể kết nối máy chủ. Hãy mở run.bat và giữ cửa sổ đó hoạt động.");
+  }
+}
+
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
@@ -17,7 +32,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   if (organizationId) headers.set("X-Organization-ID", organizationId);
 
-  const response = await fetch(`${API_BASE}/v1${path}`, {
+  const response = await request(`${API_BASE}/v1${path}`, {
     ...options,
     headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -26,7 +41,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail = typeof payload.detail === "string" ? payload.detail : "Yêu cầu không thành công";
-    throw new Error(detail);
+    throw new ApiError(detail, response.status);
   }
   return payload as T;
 }
@@ -36,10 +51,10 @@ export async function uploadApi<T>(path: string, form: FormData): Promise<T> {
   headers.set("Accept", "application/json");
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   if (organizationId) headers.set("X-Organization-ID", organizationId);
-  const response = await fetch(`${API_BASE}/v1${path}`, { method: "POST", headers, body: form });
+  const response = await request(`${API_BASE}/v1${path}`, { method: "POST", headers, body: form });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(typeof payload.detail === "string" ? payload.detail : "Tải tệp thất bại");
+    throw new ApiError(typeof payload.detail === "string" ? payload.detail : "Tải tệp thất bại", response.status);
   }
   return payload as T;
 }
