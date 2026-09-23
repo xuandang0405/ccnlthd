@@ -3,8 +3,8 @@ setlocal EnableExtensions EnableDelayedExpansion
 title AI Sales Assistant - Startup
 cd /d "%~dp0"
 
-findstr /B /C:"APP_ENV=production" "backend\.env" >nul 2>&1
-if not errorlevel 1 goto :server
+if /I "%~1"=="server" goto :server
+goto :local
 
 echo.
 echo ============================================================

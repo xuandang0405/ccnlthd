@@ -88,6 +88,7 @@ $env:APP_SECRET_KEY = Get-Content $secretPath -Raw
 $env:APP_PUBLIC_URL = "http://127.0.0.1:5173"
 $env:FRONTEND_ORIGIN = "http://127.0.0.1:5173"
 $env:DATABASE_BACKEND = "mongodb"
+$env:MONGODB_DATABASE = "ai_sales_assistant_local"
 $env:RATE_LIMIT_BACKEND = "mongodb"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
 $env:UPLOAD_DIR = "storage/uploads"
@@ -102,21 +103,22 @@ try {
 }
 
 Write-Host "[5/6] Khoi dong Backend, workers va Frontend..."
-if (-not (Test-Url "http://127.0.0.1:8000/health/ready")) {
+if (-not (Test-Url "http://127.0.0.1:8001/health/ready")) {
     Start-LocalProcess "backend" $PythonExe @(
-        "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"
+        "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8001"
     ) $BackendRoot
 }
 Start-LocalProcess "document-worker" $PythonExe @("-m", "app.workers.documents") $BackendRoot
 Start-LocalProcess "notification-worker" $PythonExe @("-m", "app.workers.notifications") $BackendRoot
 if (-not (Test-Url "http://127.0.0.1:5173")) {
     $npmExe = (Get-Command npm.cmd).Source
+    $env:VITE_DEV_API_TARGET = "http://127.0.0.1:8001"
     Start-LocalProcess "frontend" $npmExe @("run", "dev", "--", "--host", "127.0.0.1") $FrontendRoot
 }
 
 Write-Host "[6/6] Cho he thong san sang..."
 try {
-    Wait-Url "Backend" "http://127.0.0.1:8000/health/ready"
+    Wait-Url "Backend" "http://127.0.0.1:8001/health/ready"
     Wait-Url "Frontend" "http://127.0.0.1:5173"
 } catch {
     Write-Host ""
@@ -131,8 +133,8 @@ try {
 Write-Host ""
 Write-Host "He thong da san sang (che do khong Docker)."
 Write-Host "Website: http://127.0.0.1:5173"
-Write-Host "API docs: http://127.0.0.1:8000/docs"
-Write-Host "Du lieu: MongoDB Atlas"
+Write-Host "API docs: http://127.0.0.1:8001/docs"
+Write-Host "Du lieu test: MongoDB Atlas / ai_sales_assistant_local"
 Write-Host "Log: .runtime\"
-Write-Host "Luu y: quota bo nho se dat lai khi Backend khoi dong lai."
+Write-Host "Production van chay rieng tai https://seminar.bkpvp.top"
 Start-Process "http://127.0.0.1:5173"
