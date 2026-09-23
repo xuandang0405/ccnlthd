@@ -181,6 +181,10 @@ async def retrieve_context(db: Any, organization_id: str, chatbot_id: str, quest
             "_id": {"$in": document_ids},
             "organization_id": organization_id,
             "status": DocumentStatus.DONE.value,
+            "$or": [
+                {"approval_status": "APPROVED"},
+                {"approval_status": {"$exists": False}},
+            ],
         }
     ).to_list(None)
     document_map = {item["_id"]: item for item in documents}

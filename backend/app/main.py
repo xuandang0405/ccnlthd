@@ -20,6 +20,7 @@ from app.api import (
     payments,
     public_chat,
     telegram,
+    tickets,
 )
 from app.core.config import get_settings
 from app.core.mongodb import close_mongo_client, ensure_mongo_indexes, get_mongo_database
@@ -148,6 +149,7 @@ app.include_router(payments.router, prefix="/api/v1")
 app.include_router(operations.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(telegram.router, prefix="/api/v1")
+app.include_router(tickets.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health", tags=["Monitoring"])

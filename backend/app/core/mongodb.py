@@ -95,6 +95,10 @@ async def ensure_mongo_indexes() -> None:
         "telegram_connections": [([("organization_id", ASCENDING)], True)],
         "audit_logs": [([("created_at", DESCENDING)], False)],
         "rate_limit_counters": [([("expires_at", ASCENDING)], False)],
+        "support_tickets": [
+            (["organization_id", "updated_at"], False),
+            (["status", "updated_at"], False),
+        ],
     }
     for collection_name, definitions in indexes.items():
         collection = db[collection_name]

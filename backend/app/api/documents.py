@@ -74,6 +74,9 @@ async def upload_document(
         status=DocumentStatus.UPLOADED.value,
         extracted_text=None,
         processing_error=None,
+        approval_status="PENDING",
+        approval_note=None,
+        ai_review=None,
     )
     await db.documents.insert_one(document)
     await link_document_to_chatbots(

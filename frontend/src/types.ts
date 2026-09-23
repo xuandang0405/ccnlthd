@@ -87,11 +87,44 @@ export type CreditBalance = {
 export type AdminSummary = {
   organizations: number; users: number; chatbots: number; conversations: number;
   leads: number; documents_processing: number; payments_pending: number;
+  documents_pending_review: number; tickets_open: number;
 };
 
 export type AdminOrganization = {
   id: string; name: string; slug: string; is_active: boolean; created_at: string;
 };
+
+export type AdminUser = {
+  id: string; email: string; full_name: string; is_active: boolean; is_super_admin: boolean;
+  organizations: string[]; created_at: string;
+};
+
+export type AdminChatbot = Chatbot & { organization_id: string; organization_name: string };
+
+export type AdminDocument = {
+  id: string; organization_id: string; organization_name: string; original_name: string;
+  status: string; approval_status: "PENDING" | "APPROVED" | "REJECTED";
+  approval_note: string | null; ai_review: { passed: boolean; score: number; summary: string; issues: string[] } | null;
+  size_bytes: number; created_at: string;
+};
+
+export type AdminPayment = {
+  id: string; organization_id: string; organization_name: string; order_code: string;
+  product_name: string; amount: number; status: string; created_at: string;
+};
+
+export type TicketMessage = {
+  sender_type: "CUSTOMER" | "ADMIN"; sender_user_id: string | null; sender_name: string;
+  message: string; created_at: string;
+};
+
+export type SupportTicket = {
+  id: string; organization_id: string; organization_name: string | null; subject: string;
+  status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED"; priority: string;
+  messages: TicketMessage[]; created_at: string; updated_at: string;
+};
+
+export type ModerationSettings = { auto_review: boolean };
 
 export type PublicPlan = {
   code: string; display_name: string; daily_chat_limit: number | null; price_vnd: number | null;

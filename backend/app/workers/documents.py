@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.mongodb import close_mongo_client, get_mongo_database, new_document, record
 from app.models.entities import DocumentStatus
 from app.services.document_links import backfill_document_links, link_document_to_chatbots
+from app.services.document_review import review_catalog
 from app.services.documents import chunks, parse_document
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -54,6 +55,10 @@ async def process(db: Any, document: Any) -> None:
             settings.document_max_cells,
         )
         pieces = chunks(text)
+        review = review_catalog(text)
+        moderation = await db.system_settings.find_one({"_id": "document_moderation"})
+        auto_review = True if moderation is None else bool(moderation.get("auto_review", True))
+        approval_status = "APPROVED" if auto_review and review.passed else "PENDING"
         await db.document_chunks.delete_many({"document_id": document.id})
         if pieces:
             await db.document_chunks.insert_many(
@@ -74,6 +79,11 @@ async def process(db: Any, document: Any) -> None:
                     "extracted_text": text,
                     "status": DocumentStatus.DONE.value,
                     "processing_error": None,
+                    "approval_status": approval_status,
+                    "approval_note": review.summary,
+                    "ai_review": review.as_dict(),
+                    "approved_at": datetime.now(UTC) if approval_status == "APPROVED" else None,
+                    "approved_by_user_id": None,
                     "updated_at": datetime.now(UTC),
                 }
             },
@@ -107,6 +117,10 @@ async def run() -> None:
     logger.info("Document worker started")
     db = get_mongo_database()
     try:
+        await db.documents.update_many(
+            {"status": DocumentStatus.DONE.value, "approval_status": {"$exists": False}},
+            {"$set": {"approval_status": "APPROVED", "approval_note": "Dữ liệu có sẵn"}},
+        )
         linked = await backfill_document_links(db)
         logger.info("Document link backfill completed links_added=%s", linked)
         while True:
