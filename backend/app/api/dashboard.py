@@ -26,7 +26,7 @@ async def summary(
         sort=[("starts_at", -1)],
     )
     plan = await db.plans.find_one({"_id": subscription["plan_id"]}) if subscription else None
-    usage = await db.usage_logs.aggregate(
+    usage_cursor = await db.usage_logs.aggregate(
         [
             {
                 "$match": {
@@ -37,7 +37,8 @@ async def summary(
             },
             {"$group": {"_id": None, "total": {"$sum": "$quantity"}}},
         ]
-    ).to_list(1)
+    )
+    usage = await usage_cursor.to_list(1)
     return DashboardSummary(
         chatbot_count=await db.chatbots.count_documents({"organization_id": org_id}),
         conversation_count=await db.conversations.count_documents({"organization_id": org_id}),

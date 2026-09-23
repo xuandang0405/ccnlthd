@@ -83,6 +83,20 @@ async def test_chatbot_crud_is_tenant_isolated(client: AsyncClient):
     assert direct_object_reference.status_code == 404
 
 
+async def test_dashboard_summary_loads_for_new_organization(client: AsyncClient):
+    tokens, me = await register(client, "dashboard@example.com", "Dashboard Company")
+    response = await client.get(
+        "/api/v1/dashboard/summary",
+        headers={
+            "Authorization": f"Bearer {tokens['access_token']}",
+            "X-Organization-ID": me["organizations"][0]["id"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["current_plan"] == "Miễn phí"
+    assert response.json()["daily_used"] == 0
+
+
 async def test_password_reset_token_is_one_time_and_revokes_sessions(client: AsyncClient):
     tokens, _ = await register(client, "reset@example.com", "Reset Company")
     plain_token = "one-time-reset-token-with-enough-entropy-for-test"
