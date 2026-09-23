@@ -11,3 +11,6 @@ class DashboardSummary(BaseModel):
     current_plan: str
     daily_limit: int | None
     daily_used: int
+    free_credits_remaining: int
+    purchased_credits_remaining: int
+    chatbot_slots: int

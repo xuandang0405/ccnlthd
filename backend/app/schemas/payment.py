@@ -19,6 +19,10 @@ class PaymentOrderResponse(BaseModel):
     account_name: str
     transfer_content: str
     qr_code_url: str
+    product_code: str
+    product_name: str
+    product_type: str
+    quantity: int
 
 
 class PaymentOrderStatusResponse(BaseModel):
@@ -29,6 +33,10 @@ class PaymentOrderStatusResponse(BaseModel):
     amount: int
     status: PaymentStatus
     expires_at: datetime | None
+    product_code: str = "LEGACY"
+    product_name: str = "Đơn hàng cũ"
+    product_type: str = "LEGACY"
+    quantity: int = 0
 
 
 class SePayWebhookPayload(BaseModel):
@@ -55,3 +63,19 @@ class PublicPlanResponse(BaseModel):
     display_name: str
     daily_chat_limit: int | None
     price_vnd: int | None
+
+
+class PaymentProductResponse(BaseModel):
+    code: str
+    name: str
+    description: str
+    product_type: str
+    quantity: int
+    price_vnd: int
+
+
+class CreditBalanceResponse(BaseModel):
+    free_remaining: int
+    purchased_remaining: int
+    chatbot_slots: int
+    chatbot_count: int

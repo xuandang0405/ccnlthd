@@ -18,15 +18,19 @@ from app.core.mongodb import get_mongo_db, new_document, record
 from app.core.security import ensure_utc
 from app.models.entities import MemberRole, PaymentStatus
 from app.schemas.payment import (
+    CreditBalanceResponse,
     PaymentOrderResponse,
     PaymentOrderStatusResponse,
+    PaymentProductResponse,
     PublicPlanResponse,
     SePayWebhookPayload,
     WebhookAcknowledgement,
 )
+from app.services.commerce import PRODUCTS, PRODUCTS_BY_CODE
+from app.services.credits import ensure_credit_account, ensure_organization_limits
 
 router = APIRouter(tags=["Payments"])
-ORDER_PATTERN = re.compile(r"\bPRO-[A-Z0-9]{12}\b", re.IGNORECASE)
+ORDER_PATTERN = re.compile(r"\b(?:BOT1|C\d+)-[A-Z0-9]{12}\b", re.IGNORECASE)
 
 
 @router.get("/public/plans", response_model=list[PublicPlanResponse])
@@ -34,8 +38,6 @@ async def public_plans(db: Any = Depends(get_mongo_db)):
     plans = await db.plans.find({"is_active": True}).to_list(None)
     by_code = {plan["code"]: plan for plan in plans}
     free = by_code.get("FREE", {})
-    pro = by_code.get("PRO", {})
-    settings = get_settings()
     return [
         PublicPlanResponse(
             code="FREE",
@@ -44,12 +46,32 @@ async def public_plans(db: Any = Depends(get_mongo_db)):
             price_vnd=0,
         ),
         PublicPlanResponse(
-            code="PRO",
-            display_name=pro.get("display_name", "Pro"),
+            code="C1000",
+            display_name="Gói 1.000 lượt",
             daily_chat_limit=None,
-            price_vnd=pro.get("price_vnd") or settings.payment_pro_plan_amount,
+            price_vnd=PRODUCTS_BY_CODE["C1000"]["price_vnd"],
         ),
     ]
+
+
+@router.get("/payments/products", response_model=list[PaymentProductResponse])
+async def payment_products():
+    return list(PRODUCTS)
+
+
+@router.get("/payments/balance", response_model=CreditBalanceResponse)
+async def credit_balance(
+    context: TenantContext = Depends(get_tenant_context), db: Any = Depends(get_mongo_db)
+):
+    organization_id = str(context.organization.id)
+    account = await ensure_credit_account(db, organization_id)
+    limits = await ensure_organization_limits(db, organization_id)
+    return CreditBalanceResponse(
+        free_remaining=int(account.get("free_remaining", 0)),
+        purchased_remaining=int(account.get("purchased_remaining", 0)),
+        chatbot_slots=int(limits.get("chatbot_slots", 1)),
+        chatbot_count=await db.chatbots.count_documents({"organization_id": organization_id}),
+    )
 
 
 def payment_config():
@@ -59,7 +81,6 @@ def payment_config():
         "PAYMENT_BANK_BIN": settings.payment_bank_bin,
         "PAYMENT_ACCOUNT_NUMBER": settings.payment_account_number,
         "PAYMENT_ACCOUNT_NAME": settings.payment_account_name,
-        "PAYMENT_PRO_PLAN_AMOUNT": settings.payment_pro_plan_amount,
     }
     missing = [name for name, value in required.items() if not value]
     if missing:
@@ -90,34 +111,29 @@ def vietqr_url(settings: Any, order: Any) -> str:
 
 
 @router.post(
-    "/payments/orders/pro", response_model=PaymentOrderResponse, status_code=status.HTTP_201_CREATED
+    "/payments/orders/product/{product_code}",
+    response_model=PaymentOrderResponse,
+    status_code=status.HTTP_201_CREATED,
 )
-async def create_pro_order(
-    context: TenantContext = Depends(get_tenant_context), db: Any = Depends(get_mongo_db)
+async def create_product_order(
+    product_code: str,
+    context: TenantContext = Depends(get_tenant_context),
+    db: Any = Depends(get_mongo_db),
 ):
     require_owner(context)
     settings = payment_config()
+    product = PRODUCTS_BY_CODE.get(product_code.upper())
+    if product is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy gói thanh toán")
     now = datetime.now(UTC)
-    plan = await db.plans.find_one({"code": "PRO"})
-    if plan is None:
-        plan = new_document(
-            code="PRO",
-            display_name="Pro",
-            daily_chat_limit=None,
-            price_vnd=settings.payment_pro_plan_amount,
-            is_active=True,
-        )
-        await db.plans.insert_one(plan)
-    else:
-        await db.plans.update_one(
-            {"_id": plan["_id"]},
-            {"$set": {"price_vnd": settings.payment_pro_plan_amount, "updated_at": now}},
-        )
     order = new_document(
         organization_id=str(context.organization.id),
-        plan_id=plan["_id"],
-        order_code=f"PRO-{secrets.token_hex(6).upper()}",
-        amount=settings.payment_pro_plan_amount,
+        product_code=product["code"],
+        product_name=product["name"],
+        product_type=product["product_type"],
+        quantity=product["quantity"],
+        order_code=f"{product['code']}-{secrets.token_hex(6).upper()}",
+        amount=product["price_vnd"],
         status=PaymentStatus.PENDING.value,
         expires_at=now + timedelta(minutes=30),
     )
@@ -144,6 +160,10 @@ async def create_pro_order(
         account_name=settings.payment_account_name,
         transfer_content=wrapped.order_code,
         qr_code_url=vietqr_url(settings, wrapped),
+        product_code=wrapped.product_code,
+        product_name=wrapped.product_name,
+        product_type=wrapped.product_type,
+        quantity=wrapped.quantity,
     )
 
 
@@ -274,41 +294,62 @@ async def sepay_webhook(
                         session=mongo_session,
                     )
                     return WebhookAcknowledgement()
-                current_pro = await db.subscriptions.find_one(
-                    {
-                        "organization_id": order["organization_id"],
-                        "is_active": True,
-                        "$or": [{"ends_at": None}, {"ends_at": {"$gt": now}}],
-                    },
-                    sort=[("ends_at", -1)],
-                    session=mongo_session,
-                )
-                renewal_base = now
-                if current_pro and current_pro.get("ends_at"):
-                    renewal_base = max(now, ensure_utc(current_pro["ends_at"]))
-                await db.subscriptions.update_many(
-                    {"organization_id": order["organization_id"], "is_active": True},
-                    {"$set": {"is_active": False, "updated_at": now}},
-                    session=mongo_session,
-                )
-                await db.subscriptions.insert_one(
-                    new_document(
-                        organization_id=order["organization_id"],
-                        plan_id=order["plan_id"],
-                        is_active=True,
-                        starts_at=now,
-                        ends_at=renewal_base + timedelta(days=30),
-                    ),
-                    session=mongo_session,
-                )
+                if order["product_type"] == "CHAT_CREDITS":
+                    account = await db.organization_credits.find_one(
+                        {"organization_id": order["organization_id"]}, session=mongo_session
+                    )
+                    if account is None:
+                        await db.organization_credits.insert_one(
+                            new_document(
+                                organization_id=order["organization_id"],
+                                free_remaining=20,
+                                purchased_remaining=order["quantity"],
+                            ),
+                            session=mongo_session,
+                        )
+                    else:
+                        await db.organization_credits.update_one(
+                            {"_id": account["_id"]},
+                            {
+                                "$inc": {"purchased_remaining": order["quantity"]},
+                                "$set": {"updated_at": now},
+                            },
+                            session=mongo_session,
+                        )
+                elif order["product_type"] == "CHATBOT_SLOT":
+                    limits = await db.organization_limits.find_one(
+                        {"organization_id": order["organization_id"]}, session=mongo_session
+                    )
+                    if limits is None:
+                        await db.organization_limits.insert_one(
+                            new_document(
+                                organization_id=order["organization_id"],
+                                chatbot_slots=1 + order["quantity"],
+                            ),
+                            session=mongo_session,
+                        )
+                    else:
+                        await db.organization_limits.update_one(
+                            {"_id": limits["_id"]},
+                            {
+                                "$inc": {"chatbot_slots": order["quantity"]},
+                                "$set": {"updated_at": now},
+                            },
+                            session=mongo_session,
+                        )
                 await db.audit_logs.insert_one(
                     new_document(
                         organization_id=order["organization_id"],
                         actor_user_id=None,
-                        action="PAYMENT_CONFIRMED_SUBSCRIPTION_ACTIVATED",
+                        action="PAYMENT_CONFIRMED_PRODUCT_GRANTED",
                         resource_type="payment_order",
                         resource_id=order["_id"],
-                        metadata_redacted=json.dumps({"provider_transaction_id": provider_id}),
+                        metadata_redacted=json.dumps(
+                            {
+                                "provider_transaction_id": provider_id,
+                                "product_code": order["product_code"],
+                            }
+                        ),
                     ),
                     session=mongo_session,
                 )

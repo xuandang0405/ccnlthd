@@ -76,6 +76,8 @@ async def ensure_mongo_indexes() -> None:
         ],
         "plans": [([("code", ASCENDING)], True)],
         "subscriptions": [(["organization_id", "is_active"], False)],
+        "organization_credits": [([("organization_id", ASCENDING)], True)],
+        "organization_limits": [([("organization_id", ASCENDING)], True)],
         "refresh_sessions": [([("token_digest", ASCENDING)], True)],
         "password_reset_tokens": [([("token_digest", ASCENDING)], True)],
         "chatbots": [([("public_id", ASCENDING)], True), (["organization_id"], False)],

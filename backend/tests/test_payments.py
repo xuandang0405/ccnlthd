@@ -11,10 +11,16 @@ from app.core.mongodb import get_mongo_database
 from tests.test_auth_and_tenants import register
 
 
-async def test_sepay_webhook_is_authenticated_idempotent_and_activates_pro(client):
+async def test_sepay_webhook_is_authenticated_idempotent_and_grants_credits(client):
     public_plans = await client.get("/api/v1/public/plans")
     assert public_plans.status_code == 200
-    assert public_plans.json()[1]["price_vnd"] == 199000
+    assert public_plans.json()[1]["price_vnd"] == 349999
+
+    products = await client.get("/api/v1/payments/products")
+    assert products.status_code == 200
+    assert len(products.json()) == 11
+    assert len([item for item in products.json() if item["product_type"] == "CHAT_CREDITS"]) == 10
+    assert next(item for item in products.json() if item["code"] == "BOT1")["price_vnd"] == 200000
 
     tokens, me = await register(client, "pay@example.com", "Công ty Pay")
     organization_id = me["organizations"][0]["id"]
@@ -22,16 +28,17 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_activates_pro(clien
         "Authorization": f"Bearer {tokens['access_token']}",
         "X-Organization-ID": organization_id,
     }
-    created = await client.post("/api/v1/payments/orders/pro", headers=headers)
+    created = await client.post("/api/v1/payments/orders/product/C100", headers=headers)
     assert created.status_code == 201, created.text
     order = created.json()
-    assert order["amount"] == 199000
+    assert order["amount"] == 49999
+    assert order["quantity"] == 100
     assert order["account_number"] == "123456789"
     qr_url = urlparse(order["qr_code_url"])
     assert qr_url.scheme == "https"
     assert qr_url.netloc == "img.vietqr.io"
     assert qr_url.path == "/image/970422-123456789-compact2.png"
-    assert parse_qs(qr_url.query)["amount"] == ["199000"]
+    assert parse_qs(qr_url.query)["amount"] == ["49999"]
     assert parse_qs(qr_url.query)["addInfo"] == [order["order_code"]]
 
     payload = {
@@ -42,7 +49,7 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_activates_pro(clien
         "code": order["order_code"],
         "content": f"Thanh toan {order['order_code']}",
         "transferType": "in",
-        "transferAmount": 199000,
+        "transferAmount": 49999,
         "referenceCode": "REF-1",
     }
     rejected = await client.post("/api/v1/webhooks/sepay", json=payload)
@@ -59,13 +66,10 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_activates_pro(clien
 
     db = get_mongo_database()
     assert await db.transactions.count_documents({}) == 1
-    subscription = await db.subscriptions.find_one(
-        {"organization_id": organization_id, "is_active": True}
-    )
-    assert subscription is not None
-    active_plan = await db.plans.find_one({"_id": subscription["plan_id"]})
-    assert active_plan is not None
-    assert active_plan["code"] == "PRO"
+    balance = await client.get("/api/v1/payments/balance", headers=headers)
+    assert balance.status_code == 200
+    assert balance.json()["free_remaining"] == 20
+    assert balance.json()["purchased_remaining"] == 100
 
 
 async def test_sepay_hmac_alias_verifies_raw_body(client):

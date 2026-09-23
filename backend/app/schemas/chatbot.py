@@ -38,6 +38,19 @@ class ChatbotResponse(BaseModel):
     tone: str
     primary_color: str
     is_active: bool
+    credit_balance: int = 0
+    usage_count: int = 0
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ChatbotCreditAllocation(BaseModel):
+    amount: int = Field(ge=-1_000_000, le=1_000_000)
+
+    @field_validator("amount")
+    @classmethod
+    def non_zero(cls, value: int) -> int:
+        if value == 0:
+            raise ValueError("Số lượt phải khác 0")
+        return value

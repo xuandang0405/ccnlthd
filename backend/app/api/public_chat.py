@@ -20,6 +20,7 @@ from app.schemas.public_chat import (
     SourceReference,
     VisitorSessionResponse,
 )
+from app.services.credits import CreditUnavailableError, consume_credit, refund_credit
 from app.services.quota import QuotaService, QuotaUnavailableError
 
 router = APIRouter(prefix="/public/chat", tags=["Public Widget"])
@@ -226,47 +227,20 @@ async def send_message(
                 detail="Bạn đang gửi tin nhắn quá nhanh",
                 headers={"Retry-After": "60"},
             )
-        subscription = await db.subscriptions.find_one(
-            {
-                "organization_id": chatbot.organization_id,
-                "is_active": True,
-                "$or": [{"ends_at": None}, {"ends_at": {"$gt": datetime.now(UTC)}}],
-            },
-            sort=[("starts_at", -1)],
-        )
-        plan = await db.plans.find_one({"_id": subscription["plan_id"]}) if subscription else None
-        result = await quota.consume_daily(
-            chatbot.organization_id, plan["daily_chat_limit"] if plan else 20
-        )
     except QuotaUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    if result.limit is not None and result.used > result.limit:
-        retry_after = max(
-            1, int((result.reset_at - datetime.now(result.reset_at.tzinfo)).total_seconds())
-        )
-        raise HTTPException(
-            status_code=429,
-            detail="Doanh nghiệp đã sử dụng hết quota chat hôm nay",
-            headers={
-                "Retry-After": str(retry_after),
-                "X-RateLimit-Limit": str(result.limit),
-                "X-RateLimit-Remaining": "0",
-                "X-RateLimit-Reset": str(int(result.reset_at.timestamp())),
-            },
-        )
-    response.headers["X-RateLimit-Limit"] = (
-        str(result.limit) if result.limit is not None else "unlimited"
-    )
-    response.headers["X-RateLimit-Remaining"] = (
-        str(result.remaining) if result.remaining is not None else "unlimited"
-    )
-    response.headers["X-RateLimit-Reset"] = str(int(result.reset_at.timestamp()))
+    try:
+        credit = await consume_credit(db, chatbot.organization_id, chatbot.id)
+    except CreditUnavailableError as exc:
+        raise HTTPException(status_code=402, detail=str(exc)) from exc
+    response.headers["X-Credit-Remaining"] = str(credit.remaining)
     context, sources = await retrieve_context(
         db, chatbot.organization_id, chatbot.id, payload.message
     )
     try:
         reply = await gemini.generate(question=payload.message, context=context, tone=chatbot.tone)
     except GeminiServiceError as exc:
+        await refund_credit(db, chatbot.organization_id, chatbot.id, credit.source)
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     now = datetime.now(UTC)
     await db.messages.insert_many(
@@ -303,7 +277,8 @@ async def send_message(
     return PublicChatResponse(
         reply=reply,
         conversation_id=conversation.id,
-        remaining_daily=result.remaining,
-        reset_at=result.reset_at,
+        remaining_daily=credit.remaining,
+        remaining_credits=credit.remaining,
+        reset_at=None,
         sources=sources,
     )

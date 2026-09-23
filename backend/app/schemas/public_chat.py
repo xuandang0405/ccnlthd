@@ -33,5 +33,6 @@ class PublicChatResponse(BaseModel):
     reply: str
     conversation_id: UUID
     remaining_daily: int | None
-    reset_at: datetime
+    remaining_credits: int
+    reset_at: datetime | None = None
     sources: list[SourceReference]

@@ -7,6 +7,7 @@ from app.api.deps import TenantContext, get_tenant_context
 from app.core.mongodb import get_mongo_db
 from app.models.entities import LeadStatus
 from app.schemas.dashboard import DashboardSummary
+from app.services.credits import ensure_credit_account, ensure_organization_limits
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -39,6 +40,8 @@ async def summary(
         ]
     )
     usage = await usage_cursor.to_list(1)
+    credits = await ensure_credit_account(db, org_id)
+    limits = await ensure_organization_limits(db, org_id)
     return DashboardSummary(
         chatbot_count=await db.chatbots.count_documents({"organization_id": org_id}),
         conversation_count=await db.conversations.count_documents({"organization_id": org_id}),
@@ -51,4 +54,7 @@ async def summary(
         current_plan=plan["display_name"] if plan else "Miễn phí",
         daily_limit=plan["daily_chat_limit"] if plan else 20,
         daily_used=int(usage[0]["total"] if usage else 0),
+        free_credits_remaining=int(credits.get("free_remaining", 0)),
+        purchased_credits_remaining=int(credits.get("purchased_remaining", 0)),
+        chatbot_slots=int(limits.get("chatbot_slots", 1)),
     )

@@ -95,6 +95,43 @@ async def test_dashboard_summary_loads_for_new_organization(client: AsyncClient)
     assert response.status_code == 200, response.text
     assert response.json()["current_plan"] == "Miễn phí"
     assert response.json()["daily_used"] == 0
+    assert response.json()["free_credits_remaining"] == 20
+    assert response.json()["chatbot_slots"] == 1
+
+
+async def test_free_chatbot_limit_and_per_bot_credit_allocation(client: AsyncClient):
+    tokens, me = await register(client, "limits@example.com", "Limits Company")
+    organization_id = me["organizations"][0]["id"]
+    headers = {
+        "Authorization": f"Bearer {tokens['access_token']}",
+        "X-Organization-ID": organization_id,
+    }
+    first = await client.post("/api/v1/chatbots", json={"name": "Bot miễn phí"}, headers=headers)
+    assert first.status_code == 201, first.text
+    second = await client.post("/api/v1/chatbots", json={"name": "Bot thứ hai"}, headers=headers)
+    assert second.status_code == 402
+
+    db = get_mongo_database()
+    await db.organization_credits.update_one(
+        {"organization_id": organization_id}, {"$inc": {"purchased_remaining": 250}}
+    )
+    allocated = await client.post(
+        f"/api/v1/chatbots/{first.json()['id']}/credits",
+        headers=headers,
+        json={"amount": 100},
+    )
+    assert allocated.status_code == 200, allocated.text
+    assert allocated.json()["credit_balance"] == 100
+    balance = await client.get("/api/v1/payments/balance", headers=headers)
+    assert balance.json()["purchased_remaining"] == 150
+
+    reclaimed = await client.post(
+        f"/api/v1/chatbots/{first.json()['id']}/credits",
+        headers=headers,
+        json={"amount": -40},
+    )
+    assert reclaimed.status_code == 200, reclaimed.text
+    assert reclaimed.json()["credit_balance"] == 60
 
 
 async def test_password_reset_token_is_one_time_and_revokes_sessions(client: AsyncClient):

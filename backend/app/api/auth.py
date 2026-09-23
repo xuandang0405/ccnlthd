@@ -101,6 +101,10 @@ async def register(payload: RegisterRequest, db: Any = Depends(get_mongo_db)):
         starts_at=datetime.now(UTC),
         ends_at=None,
     )
+    credit_account = new_document(
+        organization_id=organization["_id"], free_remaining=20, purchased_remaining=0
+    )
+    organization_limits = new_document(organization_id=organization["_id"], chatbot_slots=1)
     try:
         async with db.client.start_session() as mongo_session:
             async with await mongo_session.start_transaction():
@@ -108,6 +112,8 @@ async def register(payload: RegisterRequest, db: Any = Depends(get_mongo_db)):
                 await db.organizations.insert_one(organization, session=mongo_session)
                 await db.organization_members.insert_one(membership, session=mongo_session)
                 await db.subscriptions.insert_one(subscription, session=mongo_session)
+                await db.organization_credits.insert_one(credit_account, session=mongo_session)
+                await db.organization_limits.insert_one(organization_limits, session=mongo_session)
                 return await issue_tokens(db, record(user_document), mongo_session)
     except DuplicateKeyError as exc:
         raise HTTPException(status_code=409, detail="Email đã được sử dụng") from exc
