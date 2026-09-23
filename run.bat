@@ -16,19 +16,16 @@ echo [MODE] LOCAL TEST
 echo        Frontend : http://127.0.0.1:5173
 echo        Backend  : http://127.0.0.1:8001
 echo        Database : MongoDB Atlas / ai_sales_assistant_local
+echo        Log se hien truc tiep trong cua so nay.
+echo        GIU CUA SO NAY MO DE WEBSITE HOAT DONG.
+echo        Nhan Ctrl+C de dung toan bo dich vu local.
 echo.
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\run-local.ps1"
 if errorlevel 1 goto :failed
 
 echo.
-echo [OK] Toan bo du an da san sang.
-echo      Website  : http://127.0.0.1:5173
-echo      API docs : http://127.0.0.1:8001/docs
-echo      Log      : %~dp0.runtime\
-echo.
-echo Ban co the dong cua so nay; cac tien trinh van tiep tuc chay nen.
-pause
+echo [OK] Toan bo dich vu local da dung.
 exit /b 0
 
 :server

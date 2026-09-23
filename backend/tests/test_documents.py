@@ -3,6 +3,7 @@ from io import BytesIO
 from httpx import AsyncClient
 from openpyxl import Workbook
 
+from app.core.mongodb import get_mongo_database
 from tests.test_auth_and_tenants import register
 
 
@@ -62,3 +63,46 @@ async def test_rejects_fake_pdf(client: AsyncClient):
         files={"file": ("malware.pdf", b"<?php echo 'bad'; ?>", "application/pdf")},
     )
     assert response.status_code == 415
+
+
+async def test_upload_links_to_chatbot_and_delete_removes_document(client: AsyncClient):
+    tokens, me = await register(client, "linked-docs@example.com", "Linked Docs")
+    organization_id = me["organizations"][0]["id"]
+    headers = {
+        "Authorization": f"Bearer {tokens['access_token']}",
+        "X-Organization-ID": organization_id,
+    }
+    chatbot = await client.post(
+        "/api/v1/chatbots", headers=headers, json={"name": "Tư vấn viên"}
+    )
+    assert chatbot.status_code == 201, chatbot.text
+
+    uploaded = await client.post(
+        "/api/v1/documents",
+        headers=headers,
+        files={
+            "file": (
+                "bang-gia.xlsx",
+                xlsx_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+    )
+    assert uploaded.status_code == 202, uploaded.text
+    document_id = uploaded.json()["id"]
+    chatbot_id = chatbot.json()["id"]
+
+    db = get_mongo_database()
+    relation = await db.chatbot_documents.find_one(
+        {"chatbot_id": chatbot_id, "document_id": document_id}
+    )
+    assert relation is not None
+
+    deleted = await client.delete(f"/api/v1/documents/{document_id}", headers=headers)
+    assert deleted.status_code == 204, deleted.text
+    assert await db.documents.find_one({"_id": document_id}) is None
+    assert await db.chatbot_documents.find_one({"document_id": document_id}) is None
+
+    listed = await client.get("/api/v1/documents", headers=headers)
+    assert listed.status_code == 200
+    assert all(item["id"] != document_id for item in listed.json())

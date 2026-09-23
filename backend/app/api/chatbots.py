@@ -9,6 +9,7 @@ from app.api.deps import TenantContext, get_tenant_context
 from app.core.mongodb import MongoRecord, get_mongo_db, new_document, record
 from app.models.entities import DocumentStatus
 from app.schemas.chatbot import ChatbotCreate, ChatbotResponse, ChatbotUpdate
+from app.services.document_links import link_chatbot_to_documents
 
 router = APIRouter(prefix="/chatbots", tags=["Chatbots"])
 
@@ -40,6 +41,11 @@ async def create_chatbot(
         is_active=True,
     )
     await db.chatbots.insert_one(document)
+    await link_chatbot_to_documents(
+        db,
+        organization_id=str(context.organization.id),
+        chatbot_id=document["_id"],
+    )
     return record(document)
 
 

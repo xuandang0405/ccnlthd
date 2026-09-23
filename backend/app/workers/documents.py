@@ -9,6 +9,7 @@ from anyio import to_thread
 from app.core.config import get_settings
 from app.core.mongodb import close_mongo_client, get_mongo_database, new_document, record
 from app.models.entities import DocumentStatus
+from app.services.document_links import backfill_document_links, link_document_to_chatbots
 from app.services.documents import chunks, parse_document
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -77,7 +78,17 @@ async def process(db: Any, document: Any) -> None:
                 }
             },
         )
-        logger.info("Processed document_id=%s chunks=%s", document.id, len(pieces))
+        linked = await link_document_to_chatbots(
+            db,
+            organization_id=document.organization_id,
+            document_id=document.id,
+        )
+        logger.info(
+            "Processed document_id=%s chunks=%s chatbot_links_added=%s",
+            document.id,
+            len(pieces),
+            linked,
+        )
     except Exception as exc:
         logger.exception("Document processing failed document_id=%s", document.id)
         await db.documents.update_one(
@@ -96,6 +107,8 @@ async def run() -> None:
     logger.info("Document worker started")
     db = get_mongo_database()
     try:
+        linked = await backfill_document_links(db)
+        logger.info("Document link backfill completed links_added=%s", linked)
         while True:
             document = await claim_document(db)
             if document is None:
@@ -107,4 +120,7 @@ async def run() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        logger.info("Document worker stopped")

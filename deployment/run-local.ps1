@@ -28,27 +28,50 @@ function Wait-Url([string]$Name, [string]$Url, [int]$Attempts = 40) {
     throw "$Name khong san sang tai $Url"
 }
 
-function Start-LocalProcess(
+function Get-DescendantProcessIds([int]$RootPid) {
+    $allProcesses = Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId
+    $descendants = @()
+    $parents = @($RootPid)
+    while ($parents.Count -gt 0) {
+        $children = @($allProcesses | Where-Object { $parents -contains [int]$_.ParentProcessId })
+        if ($children.Count -eq 0) { break }
+        $childIds = @($children | ForEach-Object { [int]$_.ProcessId })
+        $descendants += $childIds
+        $parents = $childIds
+    }
+    return $descendants
+}
+
+function Stop-LocalProcess([string]$Name) {
+    $pidPath = Join-Path $RuntimeRoot "$Name.pid"
+    if (-not (Test-Path $pidPath)) { return }
+
+    $savedPid = 0
+    [void][int]::TryParse((Get-Content $pidPath -ErrorAction SilentlyContinue), [ref]$savedPid)
+    if ($savedPid -gt 0 -and (Get-Process -Id $savedPid -ErrorAction SilentlyContinue)) {
+        $descendants = @(Get-DescendantProcessIds $savedPid)
+        [array]::Reverse($descendants)
+        foreach ($processId in $descendants) {
+            Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+        }
+        Stop-Process -Id $savedPid -Force -ErrorAction SilentlyContinue
+        Write-Host "      Da dung phien $Name cu (PID $savedPid)."
+    }
+    Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
+}
+
+function Start-ForegroundProcess(
     [string]$Name,
     [string]$FilePath,
     [string[]]$Arguments,
     [string]$WorkingDirectory
 ) {
     $pidPath = Join-Path $RuntimeRoot "$Name.pid"
-    if (Test-Path $pidPath) {
-        $savedPid = [int](Get-Content $pidPath -ErrorAction SilentlyContinue)
-        if ($savedPid -and (Get-Process -Id $savedPid -ErrorAction SilentlyContinue)) {
-            Write-Host "      $Name dang chay (PID $savedPid)."
-            return
-        }
-    }
-    $stdout = Join-Path $RuntimeRoot "$Name.out.log"
-    $stderr = Join-Path $RuntimeRoot "$Name.err.log"
     $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments `
-        -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
-        -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        -WorkingDirectory $WorkingDirectory -NoNewWindow -PassThru
     Set-Content -Path $pidPath -Value $process.Id
     Write-Host "      Da khoi dong $Name (PID $($process.Id))."
+    return [PSCustomObject]@{ Name = $Name; Process = $process }
 }
 
 Write-Host "[1/6] Kiem tra Python va Node.js..."
@@ -103,18 +126,18 @@ try {
 }
 
 Write-Host "[5/6] Khoi dong Backend, workers va Frontend..."
-if (-not (Test-Url "http://127.0.0.1:8001/health/ready")) {
-    Start-LocalProcess "backend" $PythonExe @(
-        "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8001"
-    ) $BackendRoot
-}
-Start-LocalProcess "document-worker" $PythonExe @("-m", "app.workers.documents") $BackendRoot
-Start-LocalProcess "notification-worker" $PythonExe @("-m", "app.workers.notifications") $BackendRoot
-if (-not (Test-Url "http://127.0.0.1:5173")) {
-    $npmExe = (Get-Command npm.cmd).Source
-    $env:VITE_DEV_API_TARGET = "http://127.0.0.1:8001"
-    Start-LocalProcess "frontend" $npmExe @("run", "dev", "--", "--host", "127.0.0.1") $FrontendRoot
-}
+$processNames = @("backend", "document-worker", "notification-worker", "frontend")
+foreach ($processName in $processNames) { Stop-LocalProcess $processName }
+
+$managedProcesses = @()
+$managedProcesses += Start-ForegroundProcess "backend" $PythonExe @(
+    "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8001"
+) $BackendRoot
+$managedProcesses += Start-ForegroundProcess "document-worker" $PythonExe @("-m", "app.workers.documents") $BackendRoot
+$managedProcesses += Start-ForegroundProcess "notification-worker" $PythonExe @("-m", "app.workers.notifications") $BackendRoot
+$npmExe = (Get-Command npm.cmd).Source
+$env:VITE_DEV_API_TARGET = "http://127.0.0.1:8001"
+$managedProcesses += Start-ForegroundProcess "frontend" $npmExe @("run", "dev", "--", "--host", "127.0.0.1") $FrontendRoot
 
 Write-Host "[6/6] Cho he thong san sang..."
 try {
@@ -122,11 +145,7 @@ try {
     Wait-Url "Frontend" "http://127.0.0.1:5173"
 } catch {
     Write-Host ""
-    Write-Host "Khoi dong that bai. Log nam tai $RuntimeRoot"
-    Get-ChildItem $RuntimeRoot -Filter "*.err.log" | ForEach-Object {
-        Write-Host "--- $($_.Name) ---"
-        Get-Content $_.FullName -Tail 20
-    }
+    Write-Host "Khoi dong that bai. Xem log ngay trong cua so nay."
     throw
 }
 
@@ -135,6 +154,25 @@ Write-Host "He thong da san sang (che do khong Docker)."
 Write-Host "Website: http://127.0.0.1:5173"
 Write-Host "API docs: http://127.0.0.1:8001/docs"
 Write-Host "Du lieu test: MongoDB Atlas / ai_sales_assistant_local"
-Write-Host "Log: .runtime\"
+Write-Host "Log dang hien truc tiep trong cua so run.bat."
 Write-Host "Production van chay rieng tai https://seminar.bkpvp.top"
 Start-Process "http://127.0.0.1:5173"
+Write-Host ""
+Write-Host "GIU CUA SO NAY MO DE WEBSITE HOAT DONG. Nhan Ctrl+C de dung."
+
+try {
+    while ($true) {
+        foreach ($entry in $managedProcesses) {
+            $entry.Process.Refresh()
+            if ($entry.Process.HasExited) {
+                throw "$($entry.Name) da dung bat ngo (exit code $($entry.Process.ExitCode))."
+            }
+        }
+        Start-Sleep -Seconds 1
+    }
+} finally {
+    Write-Host ""
+    Write-Host "Dang dung cac dich vu local..."
+    foreach ($processName in $processNames) { Stop-LocalProcess $processName }
+    Write-Host "Da dung toan bo dich vu local."
+}
