@@ -4,6 +4,8 @@
 
 Domain `seminar.bkpvp.top` dùng Cloudflare Tunnel chạy như Windows service và chuyển HTTPS tới `127.0.0.1:8000`. FastAPI phục vụ cả API lẫn frontend production build; database nghiệp vụ và quota SQLite chỉ bind nội bộ. Không cần mở PostgreSQL/Redis hoặc cài Docker cho cấu hình một máy này.
 
+Trang thanh toán tạo VietQR động bằng Quick Link chính thức với BIN MB Bank, số tiền và nội dung riêng của từng đơn. SePay webhook xác nhận giao dịch và frontend tự cập nhật trạng thái mỗi 5 giây.
+
 Triển khai lại an toàn (tự backup SQLite trước khi build/migration):
 
 ```powershell

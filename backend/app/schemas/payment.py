@@ -18,6 +18,7 @@ class PaymentOrderResponse(BaseModel):
     account_number: str
     account_name: str
     transfer_content: str
+    qr_code_url: str
 
 
 class PaymentOrderStatusResponse(BaseModel):

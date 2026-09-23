@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import time
+from urllib.parse import parse_qs, urlparse
 from uuid import UUID
 
 from pydantic import SecretStr
@@ -29,6 +30,12 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_activates_pro(clien
     order = created.json()
     assert order["amount"] == 199000
     assert order["account_number"] == "123456789"
+    qr_url = urlparse(order["qr_code_url"])
+    assert qr_url.scheme == "https"
+    assert qr_url.netloc == "img.vietqr.io"
+    assert qr_url.path == "/image/970422-123456789-compact2.png"
+    assert parse_qs(qr_url.query)["amount"] == ["199000"]
+    assert parse_qs(qr_url.query)["addInfo"] == [order["order_code"]]
 
     payload = {
         "id": 987654,

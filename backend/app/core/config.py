@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     sepay_api_key: SecretStr | None = None
     sepay_hmac_tolerance_seconds: int = Field(default=300, ge=30, le=900)
     payment_bank_code: str | None = None
+    payment_bank_bin: str | None = None
     payment_account_number: str | None = None
     payment_account_name: str | None = None
     payment_pro_plan_amount: int | None = Field(default=None, gt=0)

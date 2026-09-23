@@ -6,6 +6,7 @@ import secrets
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -66,6 +67,7 @@ def payment_config():
     settings = get_settings()
     required = {
         "PAYMENT_BANK_CODE": settings.payment_bank_code,
+        "PAYMENT_BANK_BIN": settings.payment_bank_bin,
         "PAYMENT_ACCOUNT_NUMBER": settings.payment_account_number,
         "PAYMENT_ACCOUNT_NAME": settings.payment_account_name,
         "PAYMENT_PRO_PLAN_AMOUNT": settings.payment_pro_plan_amount,
@@ -84,6 +86,21 @@ def require_owner(context: TenantContext) -> None:
         raise HTTPException(
             status_code=403, detail="Chỉ chủ doanh nghiệp có thể quản lý thanh toán"
         )
+
+
+def vietqr_url(settings, order: PaymentOrder) -> str:
+    bank_id = quote(settings.payment_bank_bin, safe="")
+    account_number = quote(settings.payment_account_number, safe="")
+    query = urlencode(
+        {
+            "amount": order.amount,
+            "addInfo": order.order_code,
+            "accountName": settings.payment_account_name,
+        }
+    )
+    return (
+        f"https://img.vietqr.io/image/{bank_id}-{account_number}-compact2.png?{query}"
+    )
 
 
 @router.post(
@@ -136,6 +153,7 @@ async def create_pro_order(
         account_number=settings.payment_account_number,
         account_name=settings.payment_account_name,
         transfer_content=order.order_code,
+        qr_code_url=vietqr_url(settings, order),
     )
 
 

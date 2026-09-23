@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  Bot, CreditCard, FileText, LayoutDashboard, LogOut, MessageSquareText,
-  Plus, Settings, Upload, Users, type LucideIcon,
+  Bot, Check, Copy, CreditCard, ExternalLink, FileText, LayoutDashboard, LogOut,
+  MessageSquareText, Plus, QrCode, Settings, Upload, Users, type LucideIcon,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link, Navigate } from "react-router-dom";
@@ -9,6 +9,7 @@ import { useAuth } from "../auth";
 import { api, uploadApi } from "../services/api";
 import type {
   Chatbot, Conversation, DashboardSummary, DocumentItem, Lead, Page, PaymentOrder,
+  PaymentOrderStatus,
 } from "../types";
 
 type View = "overview" | "chatbots" | "documents" | "conversations" | "leads" | "payment" | "settings";
@@ -22,6 +23,57 @@ const nav: Array<[LucideIcon, string, View]> = [
 
 function StateMessage({ children }: { children: ReactNode }) {
   return <div className="mt-6 rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">{children}</div>;
+}
+
+function PaymentPanel() {
+  const [copied, setCopied] = useState(false);
+  const payment = useMutation({
+    mutationFn: () => api<PaymentOrder>("/payments/orders/pro", { method: "POST" }),
+    onSuccess: () => setCopied(false),
+  });
+  const paymentStatus = useQuery({
+    queryKey: ["payment-order", payment.data?.id],
+    queryFn: () => api<PaymentOrderStatus>(`/payments/orders/${payment.data?.id}`),
+    enabled: !!payment.data?.id,
+    refetchInterval: (query) => query.state.data?.status === "PENDING" ? 5000 : false,
+  });
+  const status = paymentStatus.data?.status ?? payment.data?.status;
+
+  async function copyTransferContent() {
+    if (!payment.data) return;
+    await navigator.clipboard.writeText(payment.data.transfer_content);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
+
+  return <section>
+    <h2 className="text-3xl font-black">Gói & thanh toán</h2>
+    <p className="mt-2 text-slate-600">Quét VietQR để chuyển đúng số tiền và nội dung của đơn.</p>
+    <article className="mt-6 max-w-4xl rounded-2xl border border-slate-200 bg-white p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div><h3 className="text-xl font-black">Nâng cấp Pro</h3><p className="mt-2 text-slate-600">Bỏ quota Free; vẫn áp dụng giới hạn chống lạm dụng.</p></div>
+        <button onClick={() => payment.mutate()} disabled={payment.isPending} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 font-bold text-white disabled:opacity-50"><QrCode size={18}/>{payment.isPending ? "Đang tạo QR..." : payment.data ? "Tạo QR mới" : "Tạo QR thanh toán"}</button>
+      </div>
+      {payment.isError && <p className="mt-4 rounded-xl bg-red-50 p-4 text-red-700">{payment.error.message}</p>}
+      {payment.data && <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(280px,380px)_1fr]">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <img src={payment.data.qr_code_url} alt={`VietQR cho đơn ${payment.data.order_code}`} className="mx-auto w-full rounded-xl"/>
+          <a href={payment.data.qr_code_url} target="_blank" rel="noreferrer" className="mt-3 flex items-center justify-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200"><ExternalLink size={16}/>Mở QR kích thước đầy đủ</a>
+        </div>
+        <div className="rounded-2xl bg-slate-50 p-5">
+          {status === "SUCCESS" ? <div className="mb-5 flex items-center gap-3 rounded-xl bg-emerald-100 p-4 font-bold text-emerald-800"><Check size={22}/>Thanh toán thành công, gói Pro đã được kích hoạt.</div> : <div className="mb-5 rounded-xl bg-amber-100 p-4 text-sm font-semibold text-amber-900">Đang chờ thanh toán. Trạng thái được kiểm tra tự động mỗi 5 giây.</div>}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <p><span className="block text-xs text-slate-500">Ngân hàng</span><b>{payment.data.bank_code}</b></p>
+            <p><span className="block text-xs text-slate-500">Số tài khoản</span><b>{payment.data.account_number}</b></p>
+            <p><span className="block text-xs text-slate-500">Chủ tài khoản</span><b>{payment.data.account_name}</b></p>
+            <p><span className="block text-xs text-slate-500">Số tiền</span><b className="text-lg text-blue-700">{payment.data.amount.toLocaleString("vi-VN")} ₫</b></p>
+          </div>
+          <div className="mt-5 rounded-xl border border-blue-200 bg-blue-50 p-4"><span className="block text-xs text-blue-700">Nội dung chuyển khoản bắt buộc</span><div className="mt-2 flex items-center justify-between gap-3"><b className="break-all text-lg text-blue-800">{payment.data.transfer_content}</b><button onClick={copyTransferContent} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm">{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? "Đã chép" : "Sao chép"}</button></div></div>
+          {payment.data.expires_at && <p className="mt-4 text-xs text-slate-500">Đơn có hiệu lực đến {new Date(payment.data.expires_at).toLocaleString("vi-VN")}.</p>}
+        </div>
+      </div>}
+    </article>
+  </section>;
 }
 
 export function DashboardPage() {
@@ -38,7 +90,6 @@ export function DashboardPage() {
   const telegramStatus = useQuery({ queryKey: ["telegram", organizationId], queryFn: () => api<TelegramStatus>("/telegram/status"), enabled: !!organizationId && view === "settings" });
   const create = useMutation({ mutationFn: (chatbotName: string) => api<Chatbot>("/chatbots", { method: "POST", body: { name: chatbotName } }), onSuccess: () => { setName(""); queryClient.invalidateQueries({ queryKey: ["chatbots", organizationId] }); queryClient.invalidateQueries({ queryKey: ["dashboard", organizationId] }); } });
   const upload = useMutation({ mutationFn: (file: File) => { const form = new FormData(); form.append("file", file); return uploadApi<DocumentItem>("/documents", form); }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["documents", organizationId] }); queryClient.invalidateQueries({ queryKey: ["dashboard", organizationId] }); } });
-  const payment = useMutation({ mutationFn: () => api<PaymentOrder>("/payments/orders/pro", { method: "POST" }) });
   const updateLead = useMutation({ mutationFn: ({ id, status }: { id: string; status: Lead["status"] }) => api<Lead>(`/leads/${id}`, { method: "PATCH", body: { status } }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["leads", organizationId] }) });
   const telegramChallenge = useMutation({ mutationFn: () => api<{ detail: string }>("/telegram/challenge", { method: "POST", body: { chat_id: telegramChatId } }) });
   const telegramConfirm = useMutation({ mutationFn: () => api<TelegramStatus>("/telegram/confirm", { method: "POST", body: { code: telegramCode } }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["telegram", organizationId] }) });
@@ -63,7 +114,7 @@ export function DashboardPage() {
         {view === "documents" && <section><h2 className="text-3xl font-black">Tài liệu</h2><p className="mt-2 text-slate-600">PDF, DOCX hoặc XLSX, tối đa 10 MB.</p><label className="mt-6 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-bold text-white"><Upload size={18}/>{upload.isPending ? "Đang tải..." : "Chọn tệp"}<input type="file" accept=".pdf,.docx,.xlsx" className="hidden" disabled={upload.isPending} onChange={(event) => { const file = event.target.files?.[0]; if (file) upload.mutate(file); event.target.value = ""; }}/></label>{upload.isError && <p className="mt-3 text-red-600">{upload.error.message}</p>}{documents.data?.length === 0 && <StateMessage>Chưa có tài liệu.</StateMessage>}<div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">{documents.data?.map((doc) => <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 last:border-0"><div><p className="font-semibold">{doc.original_name}</p><p className="text-sm text-slate-500">{(doc.size_bytes / 1024).toFixed(1)} KB</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${doc.status === "DONE" ? "bg-emerald-50 text-emerald-700" : doc.status === "FAILED" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{doc.status}</span></div>)}</div></section>}
         {view === "conversations" && <section><h2 className="text-3xl font-black">Cuộc trò chuyện</h2><p className="mt-2 text-slate-600">Lịch sử thực thuộc doanh nghiệp của bạn.</p>{conversations.data?.total === 0 && <StateMessage>Chưa có cuộc trò chuyện.</StateMessage>}<div className="mt-6 space-y-3">{conversations.data?.items.map((item) => <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex justify-between gap-3"><p className="font-mono text-sm">{item.id}</p><span className="text-xs font-bold text-emerald-700">{item.status}</span></div><p className="mt-2 text-sm text-slate-500">{new Date(item.created_at).toLocaleString("vi-VN")}</p></article>)}</div></section>}
         {view === "leads" && <section><h2 className="text-3xl font-black">Khách hàng tiềm năng</h2><p className="mt-2 text-slate-600">Thông tin khách tự nguyện cung cấp qua widget.</p>{leads.data?.total === 0 && <StateMessage>Chưa có lead.</StateMessage>}<div className="mt-6 grid gap-4 xl:grid-cols-2">{leads.data?.items.map((lead) => <article key={lead.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-start justify-between gap-4"><div><h3 className="font-bold">{lead.customer_name || "Khách chưa đặt tên"}</h3><p className="mt-1 text-sm text-slate-500">{lead.phone || lead.email}</p></div><select value={lead.status} onChange={(event) => updateLead.mutate({ id: lead.id, status: event.target.value as Lead["status"] })} className="rounded-lg border border-slate-300 p-2 text-sm"><option value="NEW">Mới</option><option value="CONTACTED">Đã liên hệ</option><option value="QUALIFIED">Tiềm năng</option><option value="CLOSED">Đã chốt</option><option value="LOST">Không thành công</option></select></div>{lead.intent_summary && <p className="mt-4 text-sm text-slate-600">{lead.intent_summary}</p>}</article>)}</div></section>}
-        {view === "payment" && <section><h2 className="text-3xl font-black">Gói & thanh toán</h2><p className="mt-2 text-slate-600">Số tiền và thông tin nhận tiền chỉ được lấy từ backend.</p><article className="mt-6 max-w-2xl rounded-2xl border border-slate-200 bg-white p-6"><h3 className="text-xl font-black">Nâng cấp Pro</h3><p className="mt-2 text-slate-600">Bỏ quota Free; vẫn áp dụng giới hạn chống lạm dụng.</p><button onClick={() => payment.mutate()} disabled={payment.isPending} className="mt-5 rounded-xl bg-blue-600 px-5 py-3 font-bold text-white disabled:opacity-50">{payment.isPending ? "Đang tạo đơn..." : "Tạo đơn chuyển khoản"}</button>{payment.isError && <p className="mt-3 text-red-600">{payment.error.message}</p>}{payment.data && <div className="mt-6 grid gap-3 rounded-xl bg-slate-50 p-5 sm:grid-cols-2"><p><span className="block text-xs text-slate-500">Ngân hàng</span><b>{payment.data.bank_code}</b></p><p><span className="block text-xs text-slate-500">Số tài khoản</span><b>{payment.data.account_number}</b></p><p><span className="block text-xs text-slate-500">Chủ tài khoản</span><b>{payment.data.account_name}</b></p><p><span className="block text-xs text-slate-500">Số tiền</span><b>{payment.data.amount.toLocaleString("vi-VN")} ₫</b></p><p className="sm:col-span-2"><span className="block text-xs text-slate-500">Nội dung bắt buộc</span><b className="text-blue-700">{payment.data.transfer_content}</b></p></div>}</article></section>}
+        {view === "payment" && <PaymentPanel/>}
         {view === "settings" && <section><h2 className="text-3xl font-black">Cài đặt</h2><p className="mt-2 text-slate-600">Kết nối nơi nhận thông báo lead theo từng doanh nghiệp.</p><article className="mt-6 max-w-2xl rounded-2xl border border-slate-200 bg-white p-6"><h3 className="text-xl font-black">Telegram</h3><p className="mt-2 text-sm text-slate-600">Trạng thái: {telegramStatus.data?.enabled ? `Đã xác minh ${telegramStatus.data.chat_id_hint}` : "Chưa kết nối"}</p><div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]"><input value={telegramChatId} onChange={(event) => setTelegramChatId(event.target.value)} placeholder="Telegram Chat ID" className="rounded-xl border border-slate-300 px-4 py-3"/><button onClick={() => telegramChallenge.mutate()} disabled={!telegramChatId.trim() || telegramChallenge.isPending} className="rounded-xl bg-slate-950 px-4 py-3 font-bold text-white">Gửi mã xác minh</button></div>{telegramChallenge.isSuccess && <p className="mt-3 text-sm text-emerald-700">Mã đã được gửi. Nhập mã nhận được bên dưới.</p>}<div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]"><input value={telegramCode} onChange={(event) => setTelegramCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Mã 6 chữ số" className="rounded-xl border border-slate-300 px-4 py-3"/><button onClick={() => telegramConfirm.mutate()} disabled={telegramCode.length !== 6 || telegramConfirm.isPending} className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white">Xác nhận</button></div>{(telegramChallenge.isError || telegramConfirm.isError) && <p className="mt-3 text-sm text-red-600">{telegramChallenge.error?.message || telegramConfirm.error?.message}</p>}</article></section>}
       </div>
     </main>

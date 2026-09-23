@@ -59,8 +59,13 @@ export type Lead = {
 export type Page<T> = { items: T[]; total: number; page: number; page_size: number };
 
 export type PaymentOrder = {
-  id: string; order_code: string; amount: number; status: string; expires_at: string;
+  id: string; order_code: string; amount: number; status: string; expires_at: string | null;
   bank_code: string; account_number: string; account_name: string; transfer_content: string;
+  qr_code_url: string;
+};
+
+export type PaymentOrderStatus = {
+  id: string; order_code: string; amount: number; status: string; expires_at: string | null;
 };
 
 export type AdminSummary = {
