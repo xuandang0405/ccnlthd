@@ -3,14 +3,11 @@ import hmac
 import json
 import time
 from urllib.parse import parse_qs, urlparse
-from uuid import UUID
 
 from pydantic import SecretStr
-from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.core.database import SessionFactory
-from app.models.entities import Plan, Subscription, Transaction
+from app.core.mongodb import get_mongo_database
 from tests.test_auth_and_tenants import register
 
 
@@ -52,33 +49,23 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_activates_pro(clien
     assert rejected.status_code == 401
 
     webhook_headers = {"Authorization": "Apikey test-sepay-key"}
-    accepted = await client.post(
-        "/api/v1/webhooks/sepay", json=payload, headers=webhook_headers
-    )
+    accepted = await client.post("/api/v1/webhooks/sepay", json=payload, headers=webhook_headers)
     assert accepted.status_code == 200, accepted.text
-    duplicate = await client.post(
-        "/api/v1/webhooks/sepay", json=payload, headers=webhook_headers
-    )
+    duplicate = await client.post("/api/v1/webhooks/sepay", json=payload, headers=webhook_headers)
     assert duplicate.status_code == 200
 
-    status_response = await client.get(
-        f"/api/v1/payments/orders/{order['id']}", headers=headers
-    )
+    status_response = await client.get(f"/api/v1/payments/orders/{order['id']}", headers=headers)
     assert status_response.json()["status"] == "SUCCESS"
 
-    async with SessionFactory() as db:
-        transactions = (await db.scalars(select(Transaction))).all()
-        assert len(transactions) == 1
-        active_plan = await db.scalar(
-            select(Plan)
-            .join(Subscription, Subscription.plan_id == Plan.id)
-            .where(
-                Subscription.organization_id == UUID(organization_id),
-                Subscription.is_active.is_(True),
-            )
-        )
-        assert active_plan is not None
-        assert active_plan.code == "PRO"
+    db = get_mongo_database()
+    assert await db.transactions.count_documents({}) == 1
+    subscription = await db.subscriptions.find_one(
+        {"organization_id": organization_id, "is_active": True}
+    )
+    assert subscription is not None
+    active_plan = await db.plans.find_one({"_id": subscription["plan_id"]})
+    assert active_plan is not None
+    assert active_plan["code"] == "PRO"
 
 
 async def test_sepay_hmac_alias_verifies_raw_body(client):
@@ -99,9 +86,12 @@ async def test_sepay_hmac_alias_verifies_raw_body(client):
     }
     raw_body = json.dumps(payload, separators=(",", ":")).encode()
     timestamp = str(int(time.time()))
-    signature = "sha256=" + hmac.new(
-        b"test-hmac-secret", timestamp.encode() + b"." + raw_body, hashlib.sha256
-    ).hexdigest()
+    signature = (
+        "sha256="
+        + hmac.new(
+            b"test-hmac-secret", timestamp.encode() + b"." + raw_body, hashlib.sha256
+        ).hexdigest()
+    )
     try:
         response = await client.post(
             "/api/v1/payment/seepay-webhook",

@@ -1,11 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
-from sqlalchemy import select
 
-from app.core.database import SessionFactory
+from app.core.mongodb import get_mongo_database, new_document
 from app.core.security import digest_token
-from app.models.entities import PasswordResetToken, User
 
 
 def registration_payload(email: str, company: str) -> dict:
@@ -88,17 +86,17 @@ async def test_chatbot_crud_is_tenant_isolated(client: AsyncClient):
 async def test_password_reset_token_is_one_time_and_revokes_sessions(client: AsyncClient):
     tokens, _ = await register(client, "reset@example.com", "Reset Company")
     plain_token = "one-time-reset-token-with-enough-entropy-for-test"
-    async with SessionFactory() as db:
-        user = await db.scalar(select(User).where(User.email == "reset@example.com"))
-        assert user is not None
-        db.add(
-            PasswordResetToken(
-                user_id=user.id,
-                token_digest=digest_token(plain_token),
-                expires_at=datetime.now(UTC) + timedelta(minutes=30),
-            )
+    db = get_mongo_database()
+    user = await db.users.find_one({"email": "reset@example.com"})
+    assert user is not None
+    await db.password_reset_tokens.insert_one(
+        new_document(
+            user_id=user["_id"],
+            token_digest=digest_token(plain_token),
+            expires_at=datetime.now(UTC) + timedelta(minutes=30),
+            used_at=None,
         )
-        await db.commit()
+    )
 
     confirmed = await client.post(
         "/api/v1/auth/password-reset/confirm",

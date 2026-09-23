@@ -1,16 +1,16 @@
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from urllib.parse import urlencode
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from pymongo.errors import DuplicateKeyError
 
 from app.api.deps import get_current_user
 from app.core.config import get_settings
-from app.core.database import get_db
+from app.core.mongodb import MongoRecord, get_mongo_db, new_document, record
 from app.core.security import (
     create_access_token,
     digest_token,
@@ -20,16 +20,7 @@ from app.core.security import (
     verify_password,
 )
 from app.integrations.email import EmailConfigurationError, send_password_reset
-from app.models.entities import (
-    MemberRole,
-    Organization,
-    OrganizationMember,
-    PasswordResetToken,
-    Plan,
-    RefreshSession,
-    Subscription,
-    User,
-)
+from app.models.entities import MemberRole
 from app.schemas.auth import (
     CurrentUserResponse,
     LoginRequest,
@@ -50,17 +41,17 @@ def slugify(name: str) -> str:
     return slug[:80] or "doanh-nghiep"
 
 
-async def issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
+async def issue_tokens(db: Any, user: MongoRecord, session: Any = None) -> TokenResponse:
     settings = get_settings()
     refresh_plain, refresh_digest = new_refresh_token()
-    login_session = RefreshSession(
-        user_id=user.id,
+    login_session = new_document(
+        user_id=str(user.id),
         token_digest=refresh_digest,
         expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_token_days),
+        revoked_at=None,
     )
-    db.add(login_session)
-    await db.flush()
-    access, expires_at = create_access_token(user.id, login_session.id)
+    await db.refresh_sessions.insert_one(login_session, session=session)
+    access, expires_at = create_access_token(UUID(str(user.id)), UUID(login_session["_id"]))
     return TokenResponse(
         access_token=access,
         refresh_token=refresh_plain,
@@ -69,148 +60,176 @@ async def issue_tokens(db: AsyncSession, user: User) -> TokenResponse:
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(payload: RegisterRequest, db: Any = Depends(get_mongo_db)):
     email = payload.email.lower()
-    if await db.scalar(select(User.id).where(User.email == email)):
-        raise HTTPException(status_code=409, detail="Email đã được sử dụng")
-
-    free_plan = await db.scalar(select(Plan).where(Plan.code == "FREE"))
-    if free_plan is None:
-        free_plan = Plan(code="FREE", display_name="Miễn phí", daily_chat_limit=20)
-        db.add(free_plan)
-        await db.flush()
-
-    suffix = uuid4().hex[:8]
-    user = User(
-        email=email, full_name=payload.full_name, password_hash=hash_password(payload.password)
+    free_plan = await db.plans.find_one_and_update(
+        {"code": "FREE"},
+        {
+            "$setOnInsert": new_document(
+                code="FREE",
+                display_name="Miễn phí",
+                daily_chat_limit=20,
+                price_vnd=0,
+                is_active=True,
+            )
+        },
+        upsert=True,
+        return_document=True,
     )
-    organization = Organization(
+    suffix = uuid4().hex[:8]
+    user_document = new_document(
+        email=email,
+        full_name=payload.full_name,
+        password_hash=hash_password(payload.password),
+        is_active=True,
+        is_super_admin=False,
+    )
+    organization = new_document(
         name=payload.organization_name,
         slug=f"{slugify(payload.organization_name)}-{suffix}",
+        is_active=True,
     )
-    db.add_all([user, organization])
-    await db.flush()
-    db.add_all(
-        [
-            OrganizationMember(
-                organization_id=organization.id,
-                user_id=user.id,
-                role=MemberRole.BUSINESS_OWNER,
-            ),
-            Subscription(organization_id=organization.id, plan_id=free_plan.id),
-        ]
+    membership = new_document(
+        organization_id=organization["_id"],
+        user_id=user_document["_id"],
+        role=MemberRole.BUSINESS_OWNER.value,
     )
-    return await issue_tokens(db, user)
+    subscription = new_document(
+        organization_id=organization["_id"],
+        plan_id=free_plan["_id"],
+        is_active=True,
+        starts_at=datetime.now(UTC),
+        ends_at=None,
+    )
+    try:
+        async with db.client.start_session() as mongo_session:
+            async with await mongo_session.start_transaction():
+                await db.users.insert_one(user_document, session=mongo_session)
+                await db.organizations.insert_one(organization, session=mongo_session)
+                await db.organization_members.insert_one(membership, session=mongo_session)
+                await db.subscriptions.insert_one(subscription, session=mongo_session)
+                return await issue_tokens(db, record(user_document), mongo_session)
+    except DuplicateKeyError as exc:
+        raise HTTPException(status_code=409, detail="Email đã được sử dụng") from exc
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
-    user = await db.scalar(select(User).where(User.email == payload.email.lower()))
-    if not user or not verify_password(payload.password, user.password_hash) or not user.is_active:
+async def login(payload: LoginRequest, db: Any = Depends(get_mongo_db)):
+    user_document = await db.users.find_one({"email": payload.email.lower()})
+    if (
+        not user_document
+        or not verify_password(payload.password, user_document["password_hash"])
+        or not user_document.get("is_active", False)
+    ):
         raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
-    return await issue_tokens(db, user)
+    return await issue_tokens(db, record(user_document))
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(payload: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(payload: RefreshRequest, db: Any = Depends(get_mongo_db)):
     now = datetime.now(UTC)
-    session = await db.scalar(
-        select(RefreshSession).where(
-            RefreshSession.token_digest == digest_token(payload.refresh_token)
-        )
+    session = await db.refresh_sessions.find_one(
+        {"token_digest": digest_token(payload.refresh_token)}
     )
-    if not session or session.revoked_at is not None or ensure_utc(session.expires_at) <= now:
+    if (
+        not session
+        or session.get("revoked_at") is not None
+        or ensure_utc(session["expires_at"]) <= now
+    ):
         raise HTTPException(status_code=401, detail="Refresh token không hợp lệ")
-    user = await db.get(User, session.user_id)
-    if not user or not user.is_active:
+    user_document = await db.users.find_one({"_id": session["user_id"]})
+    if not user_document or not user_document.get("is_active", False):
         raise HTTPException(status_code=401, detail="Tài khoản không hợp lệ")
-    session.revoked_at = now
-    return await issue_tokens(db, user)
+    await db.refresh_sessions.update_one(
+        {"_id": session["_id"], "revoked_at": None}, {"$set": {"revoked_at": now}}
+    )
+    return await issue_tokens(db, record(user_document))
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(payload: LogoutRequest, db: AsyncSession = Depends(get_db)):
-    session = await db.scalar(
-        select(RefreshSession).where(
-            RefreshSession.token_digest == digest_token(payload.refresh_token)
-        )
+async def logout(payload: LogoutRequest, db: Any = Depends(get_mongo_db)):
+    await db.refresh_sessions.update_one(
+        {"token_digest": digest_token(payload.refresh_token), "revoked_at": None},
+        {"$set": {"revoked_at": datetime.now(UTC)}},
     )
-    if session and session.revoked_at is None:
-        session.revoked_at = datetime.now(UTC)
 
 
 @router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
-async def request_password_reset(
-    payload: PasswordResetRequest, db: AsyncSession = Depends(get_db)
-):
+async def request_password_reset(payload: PasswordResetRequest, db: Any = Depends(get_mongo_db)):
     settings = get_settings()
     if settings.email_enabled and not all(
         [settings.smtp_host, settings.smtp_username, settings.smtp_password, settings.smtp_from]
     ):
         raise HTTPException(status_code=503, detail="Dịch vụ email chưa sẵn sàng")
-    user = await db.scalar(select(User).where(User.email == payload.email.lower()))
-    if user is None or not user.is_active or not settings.email_enabled:
+    user_document = await db.users.find_one({"email": payload.email.lower()})
+    if user_document is None or not user_document.get("is_active") or not settings.email_enabled:
         return {"detail": "Nếu tài khoản hợp lệ, email hướng dẫn sẽ được gửi"}
     token = secrets.token_urlsafe(40)
-    db.add(
-        PasswordResetToken(
-            user_id=user.id,
+    await db.password_reset_tokens.insert_one(
+        new_document(
+            user_id=user_document["_id"],
             token_digest=digest_token(token),
             expires_at=datetime.now(UTC) + timedelta(minutes=30),
+            used_at=None,
         )
     )
-    await db.flush()
     reset_query = urlencode({"token": token})
     reset_url = f"{settings.frontend_origin.rstrip('/')}/reset-password?{reset_query}"
     try:
-        await send_password_reset(user.email, reset_url)
+        await send_password_reset(user_document["email"], reset_url)
     except EmailConfigurationError as exc:
         raise HTTPException(status_code=503, detail="Dịch vụ email chưa sẵn sàng") from exc
     return {"detail": "Nếu tài khoản hợp lệ, email hướng dẫn sẽ được gửi"}
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
-async def confirm_password_reset(
-    payload: PasswordResetConfirm, db: AsyncSession = Depends(get_db)
-):
+async def confirm_password_reset(payload: PasswordResetConfirm, db: Any = Depends(get_mongo_db)):
     now = datetime.now(UTC)
-    reset = await db.scalar(
-        select(PasswordResetToken).where(
-            PasswordResetToken.token_digest == digest_token(payload.token),
-            PasswordResetToken.used_at.is_(None),
-        )
+    reset = await db.password_reset_tokens.find_one(
+        {"token_digest": digest_token(payload.token), "used_at": None}
     )
-    if reset is None or ensure_utc(reset.expires_at) <= now:
+    if reset is None or ensure_utc(reset["expires_at"]) <= now:
         raise HTTPException(
             status_code=400, detail="Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn"
         )
-    user = await db.get(User, reset.user_id)
-    if user is None or not user.is_active:
+    user_document = await db.users.find_one({"_id": reset["user_id"], "is_active": True})
+    if user_document is None:
         raise HTTPException(status_code=400, detail="Tài khoản không hợp lệ")
-    user.password_hash = hash_password(payload.new_password)
-    reset.used_at = now
-    await db.execute(
-        update(RefreshSession)
-        .where(RefreshSession.user_id == user.id, RefreshSession.revoked_at.is_(None))
-        .values(revoked_at=now)
-    )
+    async with db.client.start_session() as mongo_session:
+        async with await mongo_session.start_transaction():
+            await db.users.update_one(
+                {"_id": user_document["_id"]},
+                {"$set": {"password_hash": hash_password(payload.new_password), "updated_at": now}},
+                session=mongo_session,
+            )
+            await db.password_reset_tokens.update_one(
+                {"_id": reset["_id"]}, {"$set": {"used_at": now}}, session=mongo_session
+            )
+            await db.refresh_sessions.update_many(
+                {"user_id": user_document["_id"], "revoked_at": None},
+                {"$set": {"revoked_at": now}},
+                session=mongo_session,
+            )
 
 
 @router.get("/me", response_model=CurrentUserResponse)
-async def me(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    rows = (
-        await db.execute(
-            select(Organization, OrganizationMember.role)
-            .join(OrganizationMember, OrganizationMember.organization_id == Organization.id)
-            .where(OrganizationMember.user_id == user.id)
-        )
-    ).all()
+async def me(user: MongoRecord = Depends(get_current_user), db: Any = Depends(get_mongo_db)):
+    memberships = await db.organization_members.find({"user_id": str(user.id)}).to_list(None)
+    organization_ids = [membership["organization_id"] for membership in memberships]
+    organizations = await db.organizations.find({"_id": {"$in": organization_ids}}).to_list(None)
+    organizations_by_id = {organization["_id"]: organization for organization in organizations}
     return CurrentUserResponse(
         id=user.id,
         email=user.email,
         full_name=user.full_name,
         is_super_admin=user.is_super_admin,
         organizations=[
-            OrganizationSummary(id=org.id, name=org.name, role=role.value) for org, role in rows
+            OrganizationSummary(
+                id=membership["organization_id"],
+                name=organizations_by_id[membership["organization_id"]]["name"],
+                role=membership["role"],
+            )
+            for membership in memberships
+            if membership["organization_id"] in organizations_by_id
         ],
     )

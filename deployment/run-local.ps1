@@ -65,7 +65,7 @@ if (-not (Test-Path $PythonExe)) {
 }
 
 Write-Host "[2/6] Kiem tra thu vien Backend..."
-& $PythonExe -c "import fastapi, sqlalchemy, aiosqlite" 2>$null
+& $PythonExe -c "import fastapi, pymongo" 2>$null
 if ($LASTEXITCODE -ne 0) {
     & $PythonExe -m pip install -e "${BackendRoot}[dev]"
     if ($LASTEXITCODE -ne 0) { throw "Khong cai duoc thu vien Backend." }
@@ -87,16 +87,16 @@ $env:APP_ENV = "development"
 $env:APP_SECRET_KEY = Get-Content $secretPath -Raw
 $env:APP_PUBLIC_URL = "http://127.0.0.1:5173"
 $env:FRONTEND_ORIGIN = "http://127.0.0.1:5173"
-$env:DATABASE_URL = "sqlite+aiosqlite:///./sales_assistant.db"
-$env:RATE_LIMIT_BACKEND = "memory"
+$env:DATABASE_BACKEND = "mongodb"
+$env:RATE_LIMIT_BACKEND = "mongodb"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
 $env:UPLOAD_DIR = "storage/uploads"
 
-Write-Host "[4/6] Cap nhat co so du lieu SQLite..."
+Write-Host "[4/6] Kiem tra MongoDB Atlas..."
 Push-Location $BackendRoot
 try {
-    & $PythonExe -m alembic upgrade head
-    if ($LASTEXITCODE -ne 0) { throw "Migration co so du lieu that bai." }
+    & $PythonExe (Join-Path $PSScriptRoot "prepare-mongodb.py")
+    if ($LASTEXITCODE -ne 0) { throw "Khong the ket noi MongoDB." }
 } finally {
     Pop-Location
 }
@@ -132,7 +132,7 @@ Write-Host ""
 Write-Host "He thong da san sang (che do khong Docker)."
 Write-Host "Website: http://127.0.0.1:5173"
 Write-Host "API docs: http://127.0.0.1:8000/docs"
-Write-Host "Du lieu: backend\sales_assistant.db"
+Write-Host "Du lieu: MongoDB Atlas"
 Write-Host "Log: .runtime\"
 Write-Host "Luu y: quota bo nho se dat lai khi Backend khoi dong lai."
 Start-Process "http://127.0.0.1:5173"

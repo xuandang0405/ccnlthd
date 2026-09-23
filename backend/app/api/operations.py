@@ -1,13 +1,13 @@
-from datetime import datetime
+import re
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_tenant_context
-from app.core.database import get_db
-from app.models.entities import Conversation, Lead, LeadStatus, Message
+from app.core.mongodb import get_mongo_db, record
+from app.models.entities import LeadStatus
 from app.schemas.operations import (
     ConversationDetail,
     ConversationPage,
@@ -28,65 +28,70 @@ async def list_conversations(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     context: TenantContext = Depends(get_tenant_context),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
 ):
-    filters = [Conversation.organization_id == context.organization.id]
+    query: dict[str, Any] = {"organization_id": str(context.organization.id)}
     if chatbot_id:
-        filters.append(Conversation.chatbot_id == chatbot_id)
+        query["chatbot_id"] = str(chatbot_id)
     if search:
-        filters.append(
-            Conversation.id.in_(
-                select(Message.conversation_id).where(
-                    Message.organization_id == context.organization.id,
-                    Message.content.ilike(f"%{search.strip()}%"),
-                )
-            )
-        )
-    if from_at:
-        filters.append(Conversation.created_at >= from_at)
-    if to_at:
-        filters.append(Conversation.created_at <= to_at)
-    total = int(
-        await db.scalar(select(func.count()).select_from(Conversation).where(*filters)) or 0
+        matching_messages = await db.messages.find(
+            {
+                "organization_id": str(context.organization.id),
+                "content": {"$regex": re.escape(search.strip()), "$options": "i"},
+            },
+            {"conversation_id": 1},
+        ).to_list(None)
+        query["_id"] = {"$in": list({message["conversation_id"] for message in matching_messages})}
+    if from_at or to_at:
+        query["created_at"] = {}
+        if from_at:
+            query["created_at"]["$gte"] = from_at
+        if to_at:
+            query["created_at"]["$lte"] = to_at
+    total = await db.conversations.count_documents(query)
+    documents = (
+        await db.conversations.find(query)
+        .sort("updated_at", -1)
+        .skip((page - 1) * page_size)
+        .limit(page_size)
+        .to_list(None)
     )
-    items = (
-        await db.scalars(
-            select(Conversation)
-            .where(*filters)
-            .order_by(Conversation.updated_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
-    ).all()
-    return ConversationPage(items=list(items), total=total, page=page, page_size=page_size)
+    return ConversationPage(
+        items=[record(document) for document in documents],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(
     conversation_id: UUID,
     context: TenantContext = Depends(get_tenant_context),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
 ):
-    conversation = await db.scalar(
-        select(Conversation).where(
-            Conversation.id == conversation_id,
-            Conversation.organization_id == context.organization.id,
-        )
+    organization_id = str(context.organization.id)
+    conversation = await db.conversations.find_one(
+        {"_id": str(conversation_id), "organization_id": organization_id}
     )
     if conversation is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy cuộc trò chuyện")
     messages = (
-        await db.scalars(
-            select(Message)
-            .where(
-                Message.conversation_id == conversation.id,
-                Message.organization_id == context.organization.id,
-            )
-            .order_by(Message.created_at)
+        await db.messages.find(
+            {"conversation_id": conversation["_id"], "organization_id": organization_id}
         )
-    ).all()
+        .sort("created_at", 1)
+        .to_list(None)
+    )
     return ConversationDetail.model_validate(
-        {**conversation.__dict__, "messages": list(messages)}
+        {
+            "id": conversation["_id"],
+            **{key: value for key, value in conversation.items() if key != "_id"},
+            "messages": [
+                {"id": message["_id"], **{k: v for k, v in message.items() if k != "_id"}}
+                for message in messages
+            ],
+        }
     )
 
 
@@ -98,34 +103,32 @@ async def list_leads(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     context: TenantContext = Depends(get_tenant_context),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
 ):
-    filters = [Lead.organization_id == context.organization.id]
+    query: dict[str, Any] = {"organization_id": str(context.organization.id)}
     if lead_status:
-        filters.append(Lead.status == lead_status)
+        query["status"] = lead_status.value
     if chatbot_id:
-        filters.append(Lead.chatbot_id == chatbot_id)
+        query["chatbot_id"] = str(chatbot_id)
     if search:
-        term = f"%{search.strip()}%"
-        filters.append(
-            or_(
-                Lead.customer_name.ilike(term),
-                Lead.phone.ilike(term),
-                Lead.email.ilike(term),
-                Lead.intent_summary.ilike(term),
-            )
-        )
-    total = int(await db.scalar(select(func.count()).select_from(Lead).where(*filters)) or 0)
-    items = (
-        await db.scalars(
-            select(Lead)
-            .where(*filters)
-            .order_by(Lead.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-        )
-    ).all()
-    return LeadPage(items=list(items), total=total, page=page, page_size=page_size)
+        expression = {"$regex": re.escape(search.strip()), "$options": "i"}
+        query["$or"] = [
+            {field: expression} for field in ("customer_name", "phone", "email", "intent_summary")
+        ]
+    total = await db.leads.count_documents(query)
+    documents = (
+        await db.leads.find(query)
+        .sort("created_at", -1)
+        .skip((page - 1) * page_size)
+        .limit(page_size)
+        .to_list(None)
+    )
+    return LeadPage(
+        items=[record(document) for document in documents],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.patch("/leads/{lead_id}", response_model=LeadResponse)
@@ -133,12 +136,12 @@ async def update_lead(
     lead_id: UUID,
     payload: LeadStatusUpdate,
     context: TenantContext = Depends(get_tenant_context),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
 ):
-    lead = await db.scalar(
-        select(Lead).where(Lead.id == lead_id, Lead.organization_id == context.organization.id)
+    query = {"_id": str(lead_id), "organization_id": str(context.organization.id)}
+    result = await db.leads.update_one(
+        query, {"$set": {"status": payload.status.value, "updated_at": datetime.now(UTC)}}
     )
-    if lead is None:
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Không tìm thấy lead")
-    lead.status = payload.status
-    return lead
+    return record(await db.leads.find_one(query))

@@ -1,78 +1,61 @@
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import or_, select
-
-from app.core.database import SessionFactory
+from app.core.mongodb import close_mongo_client, get_mongo_database, record
 from app.integrations.telegram import TelegramService, TelegramServiceError
-from app.models.entities import Chatbot, Lead, NotificationLog, TelegramConnection
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger("notification-worker")
 
 
-async def claim_notification() -> NotificationLog | None:
-    stale_before = datetime.now(UTC) - timedelta(minutes=5)
-    async with SessionFactory.begin() as db:
-        notification = await db.scalar(
-            select(NotificationLog)
-            .where(
-                NotificationLog.channel == "TELEGRAM",
-                NotificationLog.attempts < 5,
-                or_(
-                    NotificationLog.status.in_(["PENDING", "RETRY"]),
-                    (NotificationLog.status == "PROCESSING")
-                    & (NotificationLog.updated_at < stale_before),
-                ),
-            )
-            .order_by(NotificationLog.created_at)
-            .with_for_update(skip_locked=True)
-            .limit(1)
-        )
-        if notification:
-            notification.status = "PROCESSING"
-            notification.attempts += 1
-            db.expunge(notification)
-        return notification
+async def claim_notification(db: Any):
+    now = datetime.now(UTC)
+    notification = await db.notification_logs.find_one_and_update(
+        {
+            "channel": "TELEGRAM",
+            "attempts": {"$lt": 5},
+            "$or": [
+                {"status": {"$in": ["PENDING", "RETRY"]}},
+                {"status": "PROCESSING", "updated_at": {"$lt": now - timedelta(minutes=5)}},
+            ],
+        },
+        {"$set": {"status": "PROCESSING", "updated_at": now}, "$inc": {"attempts": 1}},
+        sort=[("created_at", 1)],
+        return_document=True,
+    )
+    return record(notification)
 
 
-async def process(notification: NotificationLog) -> None:
+async def process(db: Any, notification: Any) -> None:
     try:
-        async with SessionFactory() as db:
-            row = (
-                await db.execute(
-                    select(Lead, Chatbot, TelegramConnection)
-                    .join(Chatbot, Chatbot.id == Lead.chatbot_id)
-                    .join(
-                        TelegramConnection,
-                        TelegramConnection.organization_id == Lead.organization_id,
-                    )
-                    .where(
-                        Lead.id == notification.lead_id,
-                        Lead.organization_id == notification.organization_id,
-                        TelegramConnection.is_enabled.is_(True),
-                        TelegramConnection.verified_at.is_not(None),
-                    )
-                )
-            ).one_or_none()
-        if row is None or not row[2].chat_id:
-            raise TelegramServiceError("Kết nối Telegram không còn hoạt động")
-        lead, chatbot, connection = row
-        text = (
-            f"Lead mới từ {chatbot.name}\n"
-            f"Tên: {lead.customer_name or 'Chưa cung cấp'}\n"
-            f"Điện thoại: {lead.phone or 'Chưa cung cấp'}\n"
-            f"Email: {lead.email or 'Chưa cung cấp'}\n"
-            f"Nhu cầu: {lead.intent_summary or 'Chưa có mô tả'}\n"
-            f"Thời gian: {lead.created_at.isoformat()}"
+        lead = await db.leads.find_one(
+            {"_id": notification.lead_id, "organization_id": notification.organization_id}
         )
-        await TelegramService().send_message(connection.chat_id, text)
-        async with SessionFactory.begin() as db:
-            fresh = await db.get(NotificationLog, notification.id, with_for_update=True)
-            if fresh:
-                fresh.status = "SENT"
-                fresh.last_error = None
+        chatbot = await db.chatbots.find_one({"_id": lead["chatbot_id"]}) if lead else None
+        connection = await db.telegram_connections.find_one(
+            {
+                "organization_id": notification.organization_id,
+                "is_enabled": True,
+                "verified_at": {"$ne": None},
+            }
+        )
+        if lead is None or chatbot is None or connection is None or not connection.get("chat_id"):
+            raise TelegramServiceError("Kết nối Telegram không còn hoạt động")
+        text = (
+            f"Lead mới từ {chatbot['name']}\n"
+            f"Tên: {lead.get('customer_name') or 'Chưa cung cấp'}\n"
+            f"Điện thoại: {lead.get('phone') or 'Chưa cung cấp'}\n"
+            f"Email: {lead.get('email') or 'Chưa cung cấp'}\n"
+            f"Nhu cầu: {lead.get('intent_summary') or 'Chưa có mô tả'}\n"
+            f"Thời gian: {lead['created_at'].isoformat()}"
+        )
+        await TelegramService().send_message(connection["chat_id"], text)
+        await db.notification_logs.update_one(
+            {"_id": notification.id},
+            {"$set": {"status": "SENT", "last_error": None, "updated_at": datetime.now(UTC)}},
+        )
     except Exception as exc:
         logger.warning(
             "Notification failed id=%s attempt=%s error=%s",
@@ -80,21 +63,31 @@ async def process(notification: NotificationLog) -> None:
             notification.attempts,
             type(exc).__name__,
         )
-        async with SessionFactory.begin() as db:
-            fresh = await db.get(NotificationLog, notification.id, with_for_update=True)
-            if fresh:
-                fresh.status = "FAILED" if fresh.attempts >= 5 else "RETRY"
-                fresh.last_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+        state = "FAILED" if notification.attempts >= 5 else "RETRY"
+        await db.notification_logs.update_one(
+            {"_id": notification.id},
+            {
+                "$set": {
+                    "status": state,
+                    "last_error": f"{type(exc).__name__}: {str(exc)[:200]}",
+                    "updated_at": datetime.now(UTC),
+                }
+            },
+        )
 
 
 async def run() -> None:
     logger.info("Notification worker started")
-    while True:
-        notification = await claim_notification()
-        if notification is None:
-            await asyncio.sleep(3)
-            continue
-        await process(notification)
+    db = get_mongo_database()
+    try:
+        while True:
+            notification = await claim_notification(db)
+            if notification is None:
+                await asyncio.sleep(3)
+                continue
+            await process(db, notification)
+    finally:
+        await close_mongo_client()
 
 
 if __name__ == "__main__":

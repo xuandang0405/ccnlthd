@@ -1,20 +1,20 @@
 import argparse
 import asyncio
 
-from sqlalchemy import select
-
-from app.core.database import SessionFactory
-from app.models.entities import User
+from app.core.mongodb import close_mongo_client, get_mongo_database
 
 
 async def promote_admin(email: str) -> None:
-    async with SessionFactory() as db:
-        user = await db.scalar(select(User).where(User.email == email.lower()))
-        if user is None:
+    db = get_mongo_database()
+    try:
+        result = await db.users.update_one(
+            {"email": email.lower()}, {"$set": {"is_super_admin": True}}
+        )
+        if result.matched_count == 0:
             raise SystemExit("Không tìm thấy tài khoản")
-        user.is_super_admin = True
-        await db.commit()
-        print(f"Đã cấp SUPER_ADMIN cho {user.email}")  # noqa: T201
+        print(f"Đã cấp SUPER_ADMIN cho {email.lower()}")  # noqa: T201
+    finally:
+        await close_mongo_client()
 
 
 def main() -> None:

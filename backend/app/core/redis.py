@@ -3,11 +3,14 @@ import sqlite3
 import threading
 import time
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from pymongo import ReturnDocument
 from redis.asyncio import Redis
 
 from app.core.config import get_settings
+from app.core.mongodb import get_mongo_database
 
 
 class RedisLike(Protocol):
@@ -103,14 +106,53 @@ class SqliteRateLimitStore:
         return None
 
 
+class MongoRateLimitStore:
+    """Atomic counters shared by every application process through MongoDB."""
+
+    async def eval(self, _script: str, _number_of_keys: int, key: str, ttl: int) -> int:
+        now = datetime.now(UTC)
+        expired = {
+            "$lte": [
+                {"$ifNull": ["$expires_at", datetime(1970, 1, 1, tzinfo=UTC)]},
+                now,
+            ]
+        }
+        document = await get_mongo_database().rate_limit_counters.find_one_and_update(
+            {"_id": key},
+            [
+                {
+                    "$set": {
+                        "value": {"$cond": [expired, 1, {"$add": ["$value", 1]}]},
+                        "expires_at": {
+                            "$cond": [expired, now + timedelta(seconds=ttl), "$expires_at"]
+                        },
+                        "updated_at": now,
+                    }
+                }
+            ],
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+        return int(document["value"])
+
+    async def ping(self) -> bool:
+        return bool(await get_mongo_database().command("ping"))
+
+    async def aclose(self) -> None:
+        return None
+
+
 _memory_redis = InMemoryRedis()
 _sqlite_stores: dict[str, SqliteRateLimitStore] = {}
+_mongo_rate_limits = MongoRateLimitStore()
 
 
 def create_redis_client() -> RedisLike:
     settings = get_settings()
     if settings.rate_limit_backend == "memory":
         return _memory_redis
+    if settings.rate_limit_backend == "mongodb":
+        return _mongo_rate_limits
     if settings.rate_limit_backend == "sqlite":
         path = str(settings.rate_limit_sqlite_path.resolve())
         if path not in _sqlite_stores:
@@ -125,5 +167,5 @@ async def get_redis() -> AsyncIterator[RedisLike]:
     try:
         yield client
     finally:
-        if not isinstance(client, (InMemoryRedis, SqliteRateLimitStore)):
+        if not isinstance(client, (InMemoryRedis, SqliteRateLimitStore, MongoRateLimitStore)):
             await client.aclose()

@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL là database production. Mọi bảng nghiệp vụ chứa `organization_id` hoặc có quan hệ sở hữu tương đương; API không tin tenant do frontend gửi nếu membership không hợp lệ.
+MongoDB Atlas là database production. Mỗi loại bản ghi nằm trong một collection; dữ liệu tenant chứa `organization_id` hoặc có quan hệ sở hữu tương đương. API luôn xác minh membership, không tin tenant do frontend gửi.
 
 ```mermaid
 erDiagram
@@ -21,4 +21,4 @@ erDiagram
 
 Schema còn có `document_chunks`, `usage_logs`, `quota_logs`, `notification_logs` và `audit_logs`. `(provider, provider_transaction_id)` là unique constraint chống replay thanh toán; `(source_message_id)` chống tạo lead trùng từ một message.
 
-Migration hiện tại nằm tại `backend/alembic/versions`. Không dùng `create_all` ở runtime production.
+Index được khai báo trong `backend/app/core/mongodb.py` và được kiểm tra khi ứng dụng khởi động. Script `deployment/migrate-sqlite-to-mongodb.py` dùng để nhập dữ liệu SQLite cũ theo kiểu idempotent; SQLite chỉ được giữ làm bản rollback lịch sử.

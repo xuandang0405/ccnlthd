@@ -9,7 +9,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
 
 from app.api import (
     admin,
@@ -23,8 +22,13 @@ from app.api import (
     telegram,
 )
 from app.core.config import get_settings
-from app.core.database import SessionFactory
-from app.core.redis import InMemoryRedis, SqliteRateLimitStore, create_redis_client
+from app.core.mongodb import close_mongo_client, ensure_mongo_indexes, get_mongo_database
+from app.core.redis import (
+    InMemoryRedis,
+    MongoRateLimitStore,
+    SqliteRateLimitStore,
+    create_redis_client,
+)
 
 settings = get_settings()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -33,7 +37,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
-    yield
+    await ensure_mongo_indexes()
+    try:
+        yield
+    finally:
+        await close_mongo_client()
 
 
 app = FastAPI(
@@ -104,8 +112,7 @@ async def liveness():
 async def readiness():
     components = {"database": "down", "redis": "down"}
     try:
-        async with SessionFactory() as db:
-            await db.execute(text("SELECT 1"))
+        await get_mongo_database().command("ping")
         components["database"] = "up"
     except Exception as exc:
         logging.getLogger("app.health").warning("Database readiness failed: %s", type(exc).__name__)
@@ -114,6 +121,8 @@ async def readiness():
         if await redis.ping():
             if isinstance(redis, InMemoryRedis):
                 components["redis"] = "memory (development only)"
+            elif isinstance(redis, MongoRateLimitStore):
+                components["redis"] = "mongodb"
             elif isinstance(redis, SqliteRateLimitStore):
                 components["redis"] = "sqlite (single-server mode)"
             else:
@@ -121,7 +130,7 @@ async def readiness():
     except Exception as exc:
         logging.getLogger("app.health").warning("Redis readiness failed: %s", type(exc).__name__)
     finally:
-        if not isinstance(redis, (InMemoryRedis, SqliteRateLimitStore)):
+        if not isinstance(redis, (InMemoryRedis, SqliteRateLimitStore, MongoRateLimitStore)):
             await redis.aclose()
     healthy = components["database"] == "up" and components["redis"] != "down"
     return JSONResponse(

@@ -1,35 +1,36 @@
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$DatabasePath = Join-Path $ProjectRoot "backend\sales_assistant.db"
 $BackupRoot = Join-Path $ProjectRoot ".runtime\backups"
 $PythonExe = Join-Path $ProjectRoot "backend\.venv\Scripts\python.exe"
+$BackendRoot = Join-Path $ProjectRoot "backend"
+$BackupScript = Join-Path $ProjectRoot "deployment\backup-mongodb.py"
 
 New-Item -ItemType Directory -Force -Path $BackupRoot | Out-Null
-if (-not (Test-Path $DatabasePath)) { throw "Database file is missing." }
-
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$destination = Join-Path $BackupRoot "sales_assistant-$stamp.db"
-$env:AI_SALES_BACKUP_SOURCE = $DatabasePath
-$env:AI_SALES_BACKUP_DESTINATION = $destination
-$backupCode = @'
-import os
-import sqlite3
-
-source = sqlite3.connect(os.environ["AI_SALES_BACKUP_SOURCE"], timeout=30)
-destination = sqlite3.connect(os.environ["AI_SALES_BACKUP_DESTINATION"])
-try:
-    source.backup(destination)
-finally:
-    destination.close()
-    source.close()
-'@
-$backupCode | & $PythonExe -
+$destination = Join-Path $BackupRoot "mongodb-$stamp.zip"
+$uploadsDestination = Join-Path $BackupRoot "uploads-$stamp.zip"
+Push-Location $BackendRoot
+try {
+    & $PythonExe $BackupScript $destination
+} finally {
+    Pop-Location
+}
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $destination)) {
-    throw "SQLite backup failed."
+    throw "MongoDB backup failed."
 }
 
-Get-ChildItem -LiteralPath $BackupRoot -Filter "sales_assistant-*.db" | Where-Object {
+Get-FileHash -LiteralPath $destination -Algorithm SHA256 | Out-File "$destination.sha256"
+Compress-Archive -Path (Join-Path $BackendRoot "storage\uploads\*") `
+    -DestinationPath $uploadsDestination -CompressionLevel Optimal -Force
+Get-FileHash -LiteralPath $uploadsDestination -Algorithm SHA256 | `
+    Out-File "$uploadsDestination.sha256"
+Get-ChildItem -LiteralPath $BackupRoot -Filter "mongodb-*.zip*" | Where-Object {
+    $_.LastWriteTime -lt (Get-Date).AddDays(-14)
+} | ForEach-Object {
+    Remove-Item -LiteralPath $_.FullName -Force
+}
+Get-ChildItem -LiteralPath $BackupRoot -Filter "uploads-*.zip*" | Where-Object {
     $_.LastWriteTime -lt (Get-Date).AddDays(-14)
 } | ForEach-Object {
     Remove-Item -LiteralPath $_.FullName -Force

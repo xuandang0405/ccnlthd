@@ -1,24 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-sales_assistant}
-      POSTGRES_USER: ${POSTGRES_USER:-sales_assistant}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sales_assistant} -d ${POSTGRES_DB:-sales_assistant}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    stop_grace_period: 30s
-    logging: &default-logging
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
-    networks: [internal]
-
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
@@ -30,15 +10,16 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    logging: *default-logging
+    logging: &default-logging
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
     networks: [internal]
 
   backend:
     build: ./backend
-    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips=*"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
     env_file: .env
     depends_on:
-      postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     volumes:
       - uploads:/data/uploads
@@ -57,8 +38,6 @@ services:
     build: ./backend
     command: ["python", "-m", "app.workers.documents"]
     env_file: .env
-    depends_on:
-      postgres: {condition: service_healthy}
     volumes:
       - uploads:/data/uploads
     restart: unless-stopped
@@ -71,8 +50,6 @@ services:
     build: ./backend
     command: ["python", "-m", "app.workers.notifications"]
     env_file: .env
-    depends_on:
-      postgres: {condition: service_healthy}
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
@@ -106,7 +83,6 @@ networks:
   internal:
 
 volumes:
-  postgres_data:
   redis_data:
   uploads:
   caddy_data:

@@ -1,20 +1,15 @@
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_tenant_context
-from app.core.database import get_db
+from app.core.mongodb import get_mongo_db, new_document, record
 from app.core.security import digest_token, ensure_utc
 from app.integrations.telegram import TelegramService
-from app.models.entities import MemberRole, TelegramConnection
-from app.schemas.telegram import (
-    TelegramChallengeRequest,
-    TelegramConfirmRequest,
-    TelegramStatus,
-)
+from app.models.entities import MemberRole
+from app.schemas.telegram import TelegramChallengeRequest, TelegramConfirmRequest, TelegramStatus
 
 router = APIRouter(prefix="/telegram", tags=["Telegram"])
 
@@ -28,7 +23,7 @@ def require_owner(context: TenantContext) -> None:
         raise HTTPException(status_code=403, detail="Chỉ chủ doanh nghiệp được cấu hình Telegram")
 
 
-def status_for(connection: TelegramConnection | None) -> TelegramStatus:
+def status_for(connection: Any | None) -> TelegramStatus:
     chat_id = connection.chat_id if connection else None
     hint = f"***{chat_id[-4:]}" if chat_id else None
     return TelegramStatus(
@@ -41,12 +36,10 @@ def status_for(connection: TelegramConnection | None) -> TelegramStatus:
 
 @router.get("/status", response_model=TelegramStatus)
 async def telegram_status(
-    context: TenantContext = Depends(get_tenant_context), db: AsyncSession = Depends(get_db)
+    context: TenantContext = Depends(get_tenant_context), db: Any = Depends(get_mongo_db)
 ):
-    connection = await db.scalar(
-        select(TelegramConnection).where(
-            TelegramConnection.organization_id == context.organization.id
-        )
+    connection = record(
+        await db.telegram_connections.find_one({"organization_id": str(context.organization.id)})
     )
     return status_for(connection)
 
@@ -55,27 +48,31 @@ async def telegram_status(
 async def create_challenge(
     payload: TelegramChallengeRequest,
     context: TenantContext = Depends(get_tenant_context),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
     telegram: TelegramService = Depends(get_telegram_service),
 ):
     require_owner(context)
     code = f"{secrets.randbelow(1_000_000):06d}"
     await telegram.send_message(
-        payload.chat_id,
-        f"Mã xác minh AI Sales Assistant: {code}. Mã hết hạn sau 10 phút.",
+        payload.chat_id, f"Mã xác minh AI Sales Assistant: {code}. Mã hết hạn sau 10 phút."
     )
-    connection = await db.scalar(
-        select(TelegramConnection).where(
-            TelegramConnection.organization_id == context.organization.id
-        )
+    now = datetime.now(UTC)
+    inserted = new_document(organization_id=str(context.organization.id))
+    inserted.pop("updated_at")
+    await db.telegram_connections.update_one(
+        {"organization_id": str(context.organization.id)},
+        {
+            "$set": {
+                "pending_chat_id": payload.chat_id,
+                "verification_digest": digest_token(code),
+                "verification_expires_at": now + timedelta(minutes=10),
+                "is_enabled": False,
+                "updated_at": now,
+            },
+            "$setOnInsert": inserted,
+        },
+        upsert=True,
     )
-    if connection is None:
-        connection = TelegramConnection(organization_id=context.organization.id)
-        db.add(connection)
-    connection.pending_chat_id = payload.chat_id
-    connection.verification_digest = digest_token(code)
-    connection.verification_expires_at = datetime.now(UTC) + timedelta(minutes=10)
-    connection.is_enabled = False
     return {"detail": "Mã xác minh đã được gửi tới Telegram"}
 
 
@@ -83,40 +80,43 @@ async def create_challenge(
 async def confirm_challenge(
     payload: TelegramConfirmRequest,
     context: TenantContext = Depends(get_tenant_context),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
 ):
     require_owner(context)
-    connection = await db.scalar(
-        select(TelegramConnection).where(
-            TelegramConnection.organization_id == context.organization.id
-        )
-    )
+    query = {"organization_id": str(context.organization.id)}
+    connection = await db.telegram_connections.find_one(query)
     if (
         connection is None
-        or not connection.verification_digest
-        or not connection.verification_expires_at
-        or ensure_utc(connection.verification_expires_at) <= datetime.now(UTC)
-        or not secrets.compare_digest(connection.verification_digest, digest_token(payload.code))
+        or not connection.get("verification_digest")
+        or not connection.get("verification_expires_at")
+        or ensure_utc(connection["verification_expires_at"]) <= datetime.now(UTC)
+        or not secrets.compare_digest(connection["verification_digest"], digest_token(payload.code))
     ):
         raise HTTPException(status_code=400, detail="Mã xác minh không hợp lệ hoặc đã hết hạn")
-    connection.chat_id = connection.pending_chat_id
-    connection.pending_chat_id = None
-    connection.verification_digest = None
-    connection.verification_expires_at = None
-    connection.verified_at = datetime.now(UTC)
-    connection.is_enabled = True
-    return status_for(connection)
+    now = datetime.now(UTC)
+    await db.telegram_connections.update_one(
+        query,
+        {
+            "$set": {
+                "chat_id": connection.get("pending_chat_id"),
+                "pending_chat_id": None,
+                "verification_digest": None,
+                "verification_expires_at": None,
+                "verified_at": now,
+                "is_enabled": True,
+                "updated_at": now,
+            }
+        },
+    )
+    return status_for(record(await db.telegram_connections.find_one(query)))
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 async def disable_telegram(
-    context: TenantContext = Depends(get_tenant_context), db: AsyncSession = Depends(get_db)
+    context: TenantContext = Depends(get_tenant_context), db: Any = Depends(get_mongo_db)
 ):
     require_owner(context)
-    connection = await db.scalar(
-        select(TelegramConnection).where(
-            TelegramConnection.organization_id == context.organization.id
-        )
+    await db.telegram_connections.update_one(
+        {"organization_id": str(context.organization.id)},
+        {"$set": {"is_enabled": False, "updated_at": datetime.now(UTC)}},
     )
-    if connection:
-        connection.is_enabled = False

@@ -24,8 +24,11 @@ class Settings(BaseSettings):
     refresh_token_days: int = Field(default=30, ge=1, le=90)
 
     database_url: str = "sqlite+aiosqlite:///./sales_assistant.db"
+    database_backend: Literal["sql", "mongodb"] = "mongodb"
+    mongodb_uri: SecretStr | None = None
+    mongodb_database: str = "ai_sales_assistant"
     redis_url: str = "redis://localhost:6379/0"
-    rate_limit_backend: Literal["redis", "memory", "sqlite"] = "redis"
+    rate_limit_backend: Literal["redis", "memory", "sqlite", "mongodb"] = "mongodb"
     rate_limit_sqlite_path: Path = Path("../.runtime/rate-limits.db")
 
     gemini_api_key: SecretStr | None = None

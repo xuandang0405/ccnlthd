@@ -1,34 +1,18 @@
 import json
+import re
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
-from sqlalchemy import or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_db
+from app.core.mongodb import get_mongo_db, new_document, record
 from app.core.redis import RedisLike, get_redis
 from app.core.security import digest_token, ensure_utc
 from app.integrations.gemini import GeminiService, GeminiServiceError
-from app.models.entities import (
-    Chatbot,
-    ChatbotDocument,
-    Conversation,
-    Document,
-    DocumentChunk,
-    DocumentStatus,
-    Lead,
-    Message,
-    MessageRole,
-    NotificationLog,
-    Plan,
-    Subscription,
-    TelegramConnection,
-    UsageLog,
-    VisitorSession,
-)
+from app.models.entities import DocumentStatus, LeadStatus, MessageRole
 from app.schemas.operations import LeadResponse, PublicLeadCreate
 from app.schemas.public_chat import (
     PublicChatRequest,
@@ -58,13 +42,11 @@ def origin_allowed(origin: str | None, configured_json: str) -> bool:
     return any(host == value.lower() for value in domains)
 
 
-async def active_chatbot(db: AsyncSession, public_id: UUID) -> Chatbot:
-    chatbot = await db.scalar(
-        select(Chatbot).where(Chatbot.public_id == public_id, Chatbot.is_active.is_(True))
-    )
+async def active_chatbot(db: Any, public_id: UUID):
+    chatbot = await db.chatbots.find_one({"public_id": str(public_id), "is_active": True})
     if chatbot is None:
         raise HTTPException(status_code=404, detail="Chatbot không tồn tại hoặc đã tắt")
-    return chatbot
+    return record(chatbot)
 
 
 @router.post("/{public_id}/sessions", response_model=VisitorSessionResponse, status_code=201)
@@ -72,7 +54,7 @@ async def create_visitor_session(
     public_id: UUID,
     request: Request,
     widget_origin: str | None = Header(default=None, alias="X-Widget-Origin"),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
 ):
     chatbot = await active_chatbot(db, public_id)
     claimed_origin = widget_origin or request.headers.get("origin")
@@ -80,51 +62,47 @@ async def create_visitor_session(
         raise HTTPException(status_code=403, detail="Domain không được phép nhúng chatbot")
     token = secrets.token_urlsafe(40)
     expires_at = datetime.now(UTC) + timedelta(days=7)
-    session = VisitorSession(
+    visitor = new_document(
         organization_id=chatbot.organization_id,
         chatbot_id=chatbot.id,
         token_digest=digest_token(token),
         expires_at=expires_at,
+        last_seen_at=datetime.now(UTC),
     )
-    db.add(session)
-    await db.flush()
-    conversation = Conversation(
+    conversation = new_document(
         organization_id=chatbot.organization_id,
         chatbot_id=chatbot.id,
-        visitor_session_id=session.id,
+        visitor_session_id=visitor["_id"],
+        status="OPEN",
     )
-    db.add(conversation)
-    await db.flush()
+    await db.visitor_sessions.insert_one(visitor)
+    await db.conversations.insert_one(conversation)
     return VisitorSessionResponse(
         visitor_token=token,
-        conversation_id=conversation.id,
+        conversation_id=conversation["_id"],
         greeting=chatbot.greeting,
         primary_color=chatbot.primary_color,
         expires_at=expires_at,
     )
 
 
-async def verified_session(
-    db: AsyncSession, public_id: UUID, visitor_token: str
-) -> tuple[VisitorSession, Chatbot, Conversation]:
-    row = (
-        await db.execute(
-            select(VisitorSession, Chatbot, Conversation)
-            .join(Chatbot, Chatbot.id == VisitorSession.chatbot_id)
-            .join(Conversation, Conversation.visitor_session_id == VisitorSession.id)
-            .where(
-                VisitorSession.token_digest == digest_token(visitor_token),
-                Chatbot.public_id == public_id,
-                Chatbot.is_active.is_(True),
-                Conversation.status == "OPEN",
-            )
-            .order_by(Conversation.created_at.desc())
-            .limit(1)
-        )
-    ).one_or_none()
-    if row is None or ensure_utc(row[0].expires_at) <= datetime.now(UTC):
+async def verified_session(db: Any, public_id: UUID, visitor_token: str):
+    visitor = await db.visitor_sessions.find_one({"token_digest": digest_token(visitor_token)})
+    if visitor is None or ensure_utc(visitor["expires_at"]) <= datetime.now(UTC):
         raise HTTPException(status_code=401, detail="Phiên khách truy cập không hợp lệ")
-    return row
+    chatbot = await db.chatbots.find_one(
+        {
+            "_id": visitor["chatbot_id"],
+            "public_id": str(public_id),
+            "is_active": True,
+        }
+    )
+    conversation = await db.conversations.find_one(
+        {"visitor_session_id": visitor["_id"], "status": "OPEN"}, sort=[("created_at", -1)]
+    )
+    if chatbot is None or conversation is None:
+        raise HTTPException(status_code=401, detail="Phiên khách truy cập không hợp lệ")
+    return record(visitor), record(chatbot), record(conversation)
 
 
 @router.post("/{public_id}/leads", response_model=LeadResponse, status_code=201)
@@ -132,82 +110,100 @@ async def create_public_lead(
     public_id: UUID,
     payload: PublicLeadCreate,
     visitor_token: str = Header(alias="X-Visitor-Token"),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
 ):
-    session, chatbot, conversation = await verified_session(db, public_id, visitor_token)
+    visitor, chatbot, conversation = await verified_session(db, public_id, visitor_token)
     if not payload.has_contact():
         raise HTTPException(status_code=422, detail="Cần cung cấp email hoặc số điện thoại")
-    if payload.source_message_id:
-        message = await db.scalar(
-            select(Message).where(
-                Message.id == payload.source_message_id,
-                Message.conversation_id == conversation.id,
-                Message.organization_id == chatbot.organization_id,
-            )
+    source_message_id = str(payload.source_message_id) if payload.source_message_id else None
+    if source_message_id:
+        message = await db.messages.find_one(
+            {
+                "_id": source_message_id,
+                "conversation_id": conversation.id,
+                "organization_id": chatbot.organization_id,
+            }
         )
         if message is None:
             raise HTTPException(status_code=404, detail="Tin nhắn nguồn không hợp lệ")
-        if await db.scalar(select(Lead.id).where(Lead.source_message_id == message.id)):
+        if await db.leads.find_one({"source_message_id": source_message_id}, {"_id": 1}):
             raise HTTPException(status_code=409, detail="Lead đã được ghi nhận từ tin nhắn này")
-    lead = Lead(
+    lead = new_document(
         organization_id=chatbot.organization_id,
         chatbot_id=chatbot.id,
         conversation_id=conversation.id,
-        source_message_id=payload.source_message_id,
+        source_message_id=source_message_id,
         customer_name=payload.customer_name,
         phone=payload.phone,
         email=str(payload.email) if payload.email else None,
         intent_summary=payload.intent_summary,
+        status=LeadStatus.NEW.value,
+        assigned_user_id=None,
     )
-    db.add(lead)
-    await db.flush()
-    telegram_enabled = await db.scalar(
-        select(TelegramConnection.id).where(
-            TelegramConnection.organization_id == chatbot.organization_id,
-            TelegramConnection.is_enabled.is_(True),
-            TelegramConnection.verified_at.is_not(None),
-        )
+    await db.leads.insert_one(lead)
+    telegram_enabled = await db.telegram_connections.find_one(
+        {
+            "organization_id": chatbot.organization_id,
+            "is_enabled": True,
+            "verified_at": {"$ne": None},
+        }
     )
     if telegram_enabled:
-        db.add(
-            NotificationLog(
+        await db.notification_logs.insert_one(
+            new_document(
                 organization_id=chatbot.organization_id,
-                lead_id=lead.id,
+                lead_id=lead["_id"],
                 channel="TELEGRAM",
-                deduplication_key=f"lead:{lead.id}:telegram",
+                deduplication_key=f"lead:{lead['_id']}:telegram",
+                status="PENDING",
+                attempts=0,
+                last_error=None,
             )
         )
-    session.last_seen_at = datetime.now(UTC)
-    return lead
+    await db.visitor_sessions.update_one(
+        {"_id": visitor.id},
+        {"$set": {"last_seen_at": datetime.now(UTC), "updated_at": datetime.now(UTC)}},
+    )
+    return record(lead)
 
 
-async def retrieve_context(
-    db: AsyncSession, organization_id: UUID, chatbot_id: UUID, question: str
-) -> tuple[str, list[SourceReference]]:
+async def retrieve_context(db: Any, organization_id: str, chatbot_id: str, question: str):
     terms = sorted({word.lower() for word in question.split() if len(word) >= 3})[:8]
     if not terms:
         return "", []
+    relations = await db.chatbot_documents.find(
+        {"organization_id": organization_id, "chatbot_id": chatbot_id}, {"document_id": 1}
+    ).to_list(None)
+    document_ids = [item["document_id"] for item in relations]
+    documents = await db.documents.find(
+        {
+            "_id": {"$in": document_ids},
+            "organization_id": organization_id,
+            "status": DocumentStatus.DONE.value,
+        }
+    ).to_list(None)
+    document_map = {item["_id"]: item for item in documents}
+    if not document_map:
+        return "", []
+    pattern = "|".join(re.escape(term) for term in terms)
     rows = (
-        await db.execute(
-            select(DocumentChunk.content, Document.id, Document.original_name)
-            .join(Document, Document.id == DocumentChunk.document_id)
-            .join(ChatbotDocument, ChatbotDocument.document_id == Document.id)
-            .where(
-                DocumentChunk.organization_id == organization_id,
-                ChatbotDocument.organization_id == organization_id,
-                ChatbotDocument.chatbot_id == chatbot_id,
-                Document.status == DocumentStatus.DONE,
-                or_(*(DocumentChunk.content.ilike(f"%{term}%") for term in terms)),
-            )
-            .limit(8)
+        await db.document_chunks.find(
+            {
+                "organization_id": organization_id,
+                "document_id": {"$in": list(document_map)},
+                "content": {"$regex": pattern, "$options": "i"},
+            }
         )
-    ).all()
-    context = "\n\n".join(content for content, _, _ in rows)
-    unique_sources = {
-        document_id: SourceReference(document_id=document_id, document_name=name)
-        for _, document_id, name in rows
-    }
-    return context, list(unique_sources.values())
+        .limit(8)
+        .to_list(None)
+    )
+    context = "\n\n".join(item["content"] for item in rows)
+    source_ids = list(dict.fromkeys(item["document_id"] for item in rows))
+    sources = [
+        SourceReference(document_id=item, document_name=document_map[item]["original_name"])
+        for item in source_ids
+    ]
+    return context, sources
 
 
 @router.post("/{public_id}/messages", response_model=PublicChatResponse)
@@ -216,38 +212,31 @@ async def send_message(
     payload: PublicChatRequest,
     response: Response,
     visitor_token: str = Header(alias="X-Visitor-Token"),
-    db: AsyncSession = Depends(get_db),
+    db: Any = Depends(get_mongo_db),
     redis: RedisLike = Depends(get_redis),
     gemini: GeminiService = Depends(get_gemini_service),
 ):
-    session, chatbot, conversation = await verified_session(db, public_id, visitor_token)
+    visitor, chatbot, conversation = await verified_session(db, public_id, visitor_token)
     quota = QuotaService(redis)
     try:
-        visitor_requests = await quota.consume_visitor_rate(str(session.id))
+        visitor_requests = await quota.consume_visitor_rate(visitor.id)
         if visitor_requests > 30:
             raise HTTPException(
                 status_code=429,
                 detail="Bạn đang gửi tin nhắn quá nhanh",
                 headers={"Retry-After": "60"},
             )
-        plan = (
-            await db.execute(
-                select(Plan)
-                .join(Subscription, Subscription.plan_id == Plan.id)
-                .where(
-                    Subscription.organization_id == chatbot.organization_id,
-                    Subscription.is_active.is_(True),
-                    or_(
-                        Subscription.ends_at.is_(None),
-                        Subscription.ends_at > datetime.now(UTC),
-                    ),
-                )
-                .order_by(Subscription.starts_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
+        subscription = await db.subscriptions.find_one(
+            {
+                "organization_id": chatbot.organization_id,
+                "is_active": True,
+                "$or": [{"ends_at": None}, {"ends_at": {"$gt": datetime.now(UTC)}}],
+            },
+            sort=[("starts_at", -1)],
+        )
+        plan = await db.plans.find_one({"_id": subscription["plan_id"]}) if subscription else None
         result = await quota.consume_daily(
-            str(chatbot.organization_id), plan.daily_chat_limit if plan else 20
+            chatbot.organization_id, plan["daily_chat_limit"] if plan else 20
         )
     except QuotaUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -265,7 +254,6 @@ async def send_message(
                 "X-RateLimit-Reset": str(int(result.reset_at.timestamp())),
             },
         )
-
     response.headers["X-RateLimit-Limit"] = (
         str(result.limit) if result.limit is not None else "unlimited"
     )
@@ -273,7 +261,6 @@ async def send_message(
         str(result.remaining) if result.remaining is not None else "unlimited"
     )
     response.headers["X-RateLimit-Reset"] = str(int(result.reset_at.timestamp()))
-
     context, sources = await retrieve_context(
         db, chatbot.organization_id, chatbot.id, payload.message
     )
@@ -281,29 +268,38 @@ async def send_message(
         reply = await gemini.generate(question=payload.message, context=context, tone=chatbot.tone)
     except GeminiServiceError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
-    db.add_all(
+    now = datetime.now(UTC)
+    await db.messages.insert_many(
         [
-            Message(
+            new_document(
                 organization_id=chatbot.organization_id,
                 conversation_id=conversation.id,
-                role=MessageRole.USER,
+                role=MessageRole.USER.value,
                 content=payload.message,
+                source_metadata=None,
             ),
-            Message(
+            new_document(
                 organization_id=chatbot.organization_id,
                 conversation_id=conversation.id,
-                role=MessageRole.ASSISTANT,
+                role=MessageRole.ASSISTANT.value,
                 content=reply,
                 source_metadata=json.dumps([source.model_dump(mode="json") for source in sources]),
             ),
-            UsageLog(
-                organization_id=chatbot.organization_id,
-                chatbot_id=chatbot.id,
-                event_type="CHAT_MESSAGE",
-            ),
         ]
     )
-    session.last_seen_at = datetime.now(UTC)
+    await db.usage_logs.insert_one(
+        new_document(
+            organization_id=chatbot.organization_id,
+            chatbot_id=chatbot.id,
+            event_type="CHAT_MESSAGE",
+            quantity=1,
+            usage_date=date.today().isoformat(),
+        )
+    )
+    await db.visitor_sessions.update_one(
+        {"_id": visitor.id}, {"$set": {"last_seen_at": now, "updated_at": now}}
+    )
+    await db.conversations.update_one({"_id": conversation.id}, {"$set": {"updated_at": now}})
     return PublicChatResponse(
         reply=reply,
         conversation_id=conversation.id,

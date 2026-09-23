@@ -34,20 +34,17 @@ if not exist ".env" (
       "$path = [IO.Path]::GetFullPath('.env');" ^
       "$text = [IO.File]::ReadAllText($path);" ^
       "$secret = ([Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N'));" ^
-      "$dbPassword = [Guid]::NewGuid().ToString('N');" ^
       "$text = $text.Replace('APP_ENV=development', 'APP_ENV=production');" ^
       "$text = $text.Replace('APP_SECRET_KEY=replace-with-at-least-32-random-characters', 'APP_SECRET_KEY=' + $secret);" ^
       "$text = $text.Replace('APP_PUBLIC_URL=http://localhost:8080', 'APP_PUBLIC_URL=http://localhost');" ^
       "$text = $text.Replace('FRONTEND_ORIGIN=http://localhost:5173', 'FRONTEND_ORIGIN=http://localhost');" ^
       "$text = $text.Replace('APP_DOMAIN=localhost', 'APP_DOMAIN=http://localhost');" ^
-      "$text = $text.Replace('POSTGRES_PASSWORD=change-me', 'POSTGRES_PASSWORD=' + $dbPassword);" ^
-      "$text = $text.Replace('sales_assistant:change-me@postgres', 'sales_assistant:' + $dbPassword + '@postgres');" ^
       "[IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false));"
     if errorlevel 1 (
         echo [LOI] Khong tao duoc file .env.
         goto :failed
     )
-    echo       Da tao APP_SECRET_KEY va mat khau PostgreSQL ngau nhien.
+    echo       Da tao APP_SECRET_KEY. Hay dien MONGODB_URI truoc khi chay.
 ) else (
     echo [1/5] Su dung file .env hien co.
 )

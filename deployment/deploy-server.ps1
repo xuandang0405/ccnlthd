@@ -13,13 +13,7 @@ Set-Content -Path $DeployLock -Value $PID
 try {
     & (Join-Path $PSScriptRoot "stop-server.ps1") -ForDeployment
 
-$database = Join-Path $BackendRoot "sales_assistant.db"
-if (Test-Path $database) {
-    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    Copy-Item -LiteralPath $database -Destination (
-        Join-Path $RuntimeRoot "backups\sales_assistant-$stamp.db"
-    )
-}
+& (Join-Path $PSScriptRoot "backup-server.ps1")
 
 & npm.cmd ci --prefix $FrontendRoot
 if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
@@ -28,8 +22,8 @@ if ($LASTEXITCODE -ne 0) { throw "Frontend build failed." }
 
 Push-Location $BackendRoot
 try {
-    & $PythonExe -m alembic upgrade head
-    if ($LASTEXITCODE -ne 0) { throw "Database migration failed." }
+    & $PythonExe (Join-Path $PSScriptRoot "prepare-mongodb.py")
+    if ($LASTEXITCODE -ne 0) { throw "MongoDB preparation failed." }
 } finally {
     Pop-Location
 }

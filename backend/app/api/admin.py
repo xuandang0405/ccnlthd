@@ -1,47 +1,31 @@
+import json
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_super_admin
-from app.core.database import get_db
-from app.models.entities import (
-    AuditLog,
-    Chatbot,
-    Conversation,
-    Document,
-    DocumentStatus,
-    Lead,
-    Organization,
-    PaymentOrder,
-    PaymentStatus,
-    User,
-)
+from app.core.mongodb import get_mongo_db, new_document, record
+from app.models.entities import DocumentStatus, PaymentStatus
 from app.schemas.admin import AdminOrganization, AdminSummary, OrganizationStateUpdate
 
 router = APIRouter(prefix="/admin", tags=["Super Admin"])
 
 
-async def model_count(db: AsyncSession, model, *filters) -> int:
-    return int(await db.scalar(select(func.count()).select_from(model).where(*filters)) or 0)
-
-
 @router.get("/summary", response_model=AdminSummary)
-async def summary(
-    _: User = Depends(get_super_admin), db: AsyncSession = Depends(get_db)
-):
+async def summary(_: Any = Depends(get_super_admin), db: Any = Depends(get_mongo_db)):
     return AdminSummary(
-        organizations=await model_count(db, Organization),
-        users=await model_count(db, User),
-        chatbots=await model_count(db, Chatbot),
-        conversations=await model_count(db, Conversation),
-        leads=await model_count(db, Lead),
-        documents_processing=await model_count(
-            db, Document, Document.status.in_([DocumentStatus.UPLOADED, DocumentStatus.PROCESSING])
+        organizations=await db.organizations.count_documents({}),
+        users=await db.users.count_documents({}),
+        chatbots=await db.chatbots.count_documents({}),
+        conversations=await db.conversations.count_documents({}),
+        leads=await db.leads.count_documents({}),
+        documents_processing=await db.documents.count_documents(
+            {"status": {"$in": [DocumentStatus.UPLOADED.value, DocumentStatus.PROCESSING.value]}}
         ),
-        payments_pending=await model_count(
-            db, PaymentOrder, PaymentOrder.status == PaymentStatus.PENDING
+        payments_pending=await db.payment_orders.count_documents(
+            {"status": PaymentStatus.PENDING.value}
         ),
     )
 
@@ -49,37 +33,34 @@ async def summary(
 @router.get("/organizations", response_model=list[AdminOrganization])
 async def organizations(
     limit: int = Query(default=100, ge=1, le=500),
-    _: User = Depends(get_super_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Any = Depends(get_super_admin),
+    db: Any = Depends(get_mongo_db),
 ):
-    return list(
-        (
-            await db.scalars(
-                select(Organization).order_by(Organization.created_at.desc()).limit(limit)
-            )
-        ).all()
-    )
+    documents = await db.organizations.find({}).sort("created_at", -1).limit(limit).to_list(None)
+    return [record(document) for document in documents]
 
 
 @router.patch("/organizations/{organization_id}", response_model=AdminOrganization)
 async def set_organization_state(
     organization_id: UUID,
     payload: OrganizationStateUpdate,
-    admin: User = Depends(get_super_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Any = Depends(get_super_admin),
+    db: Any = Depends(get_mongo_db),
 ):
-    organization = await db.get(Organization, organization_id)
-    if organization is None:
+    query = {"_id": str(organization_id)}
+    result = await db.organizations.update_one(
+        query, {"$set": {"is_active": payload.is_active, "updated_at": datetime.now(UTC)}}
+    )
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Không tìm thấy doanh nghiệp")
-    organization.is_active = payload.is_active
-    db.add(
-        AuditLog(
-            organization_id=organization.id,
-            actor_user_id=admin.id,
+    await db.audit_logs.insert_one(
+        new_document(
+            organization_id=str(organization_id),
+            actor_user_id=str(admin.id),
             action="ORGANIZATION_STATE_CHANGED",
             resource_type="organization",
-            resource_id=str(organization.id),
-            metadata_redacted=f'{{"is_active": {str(payload.is_active).lower()}}}',
+            resource_id=str(organization_id),
+            metadata_redacted=json.dumps({"is_active": payload.is_active}),
         )
     )
-    return organization
+    return record(await db.organizations.find_one(query))
