@@ -5,8 +5,20 @@ $BackendRoot = Join-Path $ProjectRoot "backend"
 $FrontendRoot = Join-Path $ProjectRoot "frontend"
 $RuntimeRoot = Join-Path $ProjectRoot ".runtime"
 $PythonExe = Join-Path $BackendRoot ".venv\Scripts\python.exe"
+$InstanceMutex = [System.Threading.Mutex]::new($false, "Local\AiSalesAssistantLocalRunner")
+$HasInstanceLock = $InstanceMutex.WaitOne(0)
 
 New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
+
+if (-not $HasInstanceLock) {
+    Write-Host ""
+    Write-Host "[THONG BAO] Du an local dang chay trong mot cua so run.bat khac."
+    Write-Host "             Admin: http://127.0.0.1:5173/admin"
+    Write-Host "             User : http://127.0.0.1:5173/app"
+    Write-Host "             Khong khoi dong them de tranh cac tien trinh dung lan nhau."
+    Start-Process "http://127.0.0.1:5173"
+    exit 0
+}
 
 function Test-Url([string]$Url) {
     try {
@@ -120,7 +132,9 @@ Write-Host "[4/6] Kiem tra MongoDB Atlas..."
 Push-Location $BackendRoot
 try {
     & $PythonExe (Join-Path $PSScriptRoot "prepare-mongodb.py")
-    if ($LASTEXITCODE -ne 0) { throw "Khong the ket noi MongoDB." }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Khong the ket noi MongoDB. Hay kiem tra Atlas Network Access / IP Access List."
+    }
 } finally {
     Pop-Location
 }
@@ -151,8 +165,16 @@ try {
 
 Write-Host ""
 Write-Host "He thong da san sang (che do khong Docker)."
-Write-Host "Website: http://127.0.0.1:5173"
-Write-Host "API docs: http://127.0.0.1:8001/docs"
+Write-Host ""
+Write-Host "CAC LINK SAN SANG:"
+Write-Host "  Trang chu        : http://127.0.0.1:5173/"
+Write-Host "  Dang nhap User   : http://127.0.0.1:5173/login"
+Write-Host "  Dashboard User   : http://127.0.0.1:5173/app"
+Write-Host "  Trang quan tri   : http://127.0.0.1:5173/admin"
+Write-Host "  Test Widget      : http://127.0.0.1:5173/widget-test.html"
+Write-Host "  Widget Script    : http://127.0.0.1:5173/widget.js"
+Write-Host "  Tai lieu API     : http://127.0.0.1:8001/docs"
+Write-Host "  Kiem tra Backend : http://127.0.0.1:8001/health/ready"
 Write-Host "Du lieu test: MongoDB Atlas / ai_sales_assistant_local"
 Write-Host "Log dang hien truc tiep trong cua so run.bat."
 Write-Host "Production van chay rieng tai https://seminar.bkpvp.top"
@@ -174,5 +196,9 @@ try {
     Write-Host ""
     Write-Host "Dang dung cac dich vu local..."
     foreach ($processName in $processNames) { Stop-LocalProcess $processName }
+    if ($HasInstanceLock) {
+        $InstanceMutex.ReleaseMutex()
+        $InstanceMutex.Dispose()
+    }
     Write-Host "Da dung toan bo dich vu local."
 }

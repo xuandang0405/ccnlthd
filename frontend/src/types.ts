@@ -87,7 +87,7 @@ export type CreditBalance = {
 export type AdminSummary = {
   organizations: number; users: number; chatbots: number; conversations: number;
   leads: number; documents_processing: number; payments_pending: number;
-  documents_pending_review: number; tickets_open: number;
+  documents_pending_review: number; tickets_open: number; tickets_unread: number;
 };
 
 export type AdminOrganization = {
@@ -115,13 +115,19 @@ export type AdminPayment = {
 
 export type TicketMessage = {
   sender_type: "CUSTOMER" | "ADMIN"; sender_user_id: string | null; sender_name: string;
-  message: string; created_at: string;
+  message: string; created_at: string; attachments: TicketAttachment[];
+};
+
+export type TicketAttachment = {
+  id: string; original_name: string; mime_type: string; size_bytes: number; created_at: string;
 };
 
 export type SupportTicket = {
   id: string; organization_id: string; organization_name: string | null; subject: string;
+  created_by_user_id: string | null; created_by_email: string | null; created_by_name: string | null;
   status: "OPEN" | "IN_PROGRESS" | "RESOLVED" | "CLOSED"; priority: string;
-  messages: TicketMessage[]; created_at: string; updated_at: string;
+  messages: TicketMessage[]; admin_unread_count: number; customer_unread_count: number;
+  created_at: string; updated_at: string;
 };
 
 export type ModerationSettings = { auto_review: boolean };

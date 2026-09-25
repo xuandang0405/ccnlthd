@@ -14,6 +14,7 @@ class AdminSummary(BaseModel):
     payments_pending: int
     documents_pending_review: int = 0
     tickets_open: int = 0
+    tickets_unread: int = 0
 
 
 class AdminOrganization(BaseModel):

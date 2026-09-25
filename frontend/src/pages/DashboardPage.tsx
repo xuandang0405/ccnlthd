@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot, Check, Copy, CreditCard, ExternalLink, FileText, LayoutDashboard, LogOut,
-  Headphones, MessageSquareText, Plus, QrCode, Settings, Trash2, Upload, Users, type LucideIcon,
+  Headphones, MessageSquareText, Paperclip, Plus, QrCode, Settings, Trash2, Upload, Users, type LucideIcon,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { TicketChat } from "../components/TicketChat";
 import { api, uploadApi } from "../services/api";
 import type {
   Chatbot, Conversation, CreditBalance, DashboardSummary, DocumentItem, Lead, Page,
@@ -84,14 +85,58 @@ function PaymentPanel() {
   </section>;
 }
 
+function CustomerSupportPanel({ organizationId }: { organizationId: string }) {
+  const queryClient = useQueryClient();
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [createFiles, setCreateFiles] = useState<File[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [reply, setReply] = useState("");
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const tickets = useQuery({ queryKey: ["tickets", organizationId], queryFn: () => api<SupportTicket[]>("/tickets"), refetchInterval: 5000 });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["tickets", organizationId] });
+  const createTicket = useMutation({
+    mutationFn: async () => {
+      let ticket = await api<SupportTicket>("/tickets", { method: "POST", body: { subject, message } });
+      if (createFiles.length > 0) {
+        const form = new FormData();
+        createFiles.forEach((file) => form.append("files", file));
+        form.append("message", "");
+        ticket = await uploadApi<SupportTicket>(`/tickets/${ticket.id}/attachments`, form);
+      }
+      return ticket;
+    },
+    onSuccess: (ticket) => { setSubject(""); setMessage(""); setCreateFiles([]); setSelectedId(ticket.id); refresh(); },
+  });
+  const sendReply = useMutation({
+    mutationFn: async (ticket: SupportTicket) => {
+      if (replyFiles.length > 0) {
+        const form = new FormData();
+        replyFiles.forEach((file) => form.append("files", file));
+        form.append("message", reply.trim());
+        return uploadApi<SupportTicket>(`/tickets/${ticket.id}/attachments`, form);
+      }
+      return api<SupportTicket>(`/tickets/${ticket.id}/replies`, { method: "POST", body: { message: reply.trim() } });
+    },
+    onSuccess: () => { setReply(""); setReplyFiles([]); refresh(); },
+  });
+  const markRead = useMutation({ mutationFn: (id: string) => api<SupportTicket>(`/tickets/${id}/read`, { method: "PATCH" }), onSuccess: refresh });
+  function selectTicket(ticket: SupportTicket) { setSelectedId(ticket.id); if (ticket.customer_unread_count > 0) markRead.mutate(ticket.id); }
+
+  return <section><h2 className="text-3xl font-black">Hỗ trợ</h2><p className="mt-2 text-slate-600">Trao đổi trực tiếp với quản trị viên như Messenger, có thể gửi ảnh và tệp.</p>
+    <form onSubmit={(event) => { event.preventDefault(); if (subject.trim() && message.trim()) createTicket.mutate(); }} className="mt-6 max-w-3xl space-y-3 rounded-2xl border border-slate-200 bg-white p-5"><h3 className="font-black">Tạo cuộc trò chuyện mới</h3><input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Tiêu đề vấn đề" maxLength={200} className="w-full rounded-xl border border-slate-300 px-4 py-3"/><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Mô tả chi tiết vấn đề cần hỗ trợ..." maxLength={5000} rows={3} className="w-full rounded-xl border border-slate-300 px-4 py-3"/><div className="flex flex-wrap items-center gap-3"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold"><Paperclip size={17}/>Đính kèm<input type="file" multiple accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx,.zip" className="hidden" onChange={(event) => { setCreateFiles(Array.from(event.target.files ?? []).slice(0, 5)); event.target.value = ""; }}/></label><button disabled={createTicket.isPending || subject.trim().length < 3 || message.trim().length < 5} className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white disabled:opacity-40">{createTicket.isPending ? "Đang gửi..." : "Tạo ticket"}</button>{createFiles.map((file) => <span key={`${file.name}-${file.size}`} className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">{file.name}</span>)}</div>{createTicket.isError && <p className="text-sm text-red-600">{createTicket.error.message}</p>}</form>
+    {tickets.isError && <StateMessage>Không tải được ticket: {tickets.error.message}</StateMessage>}
+    <TicketChat tickets={tickets.data} selectedId={selectedId} viewer="CUSTOMER" reply={reply} files={replyFiles} sending={sendReply.isPending} onSelect={selectTicket} onReplyChange={setReply} onFilesChange={setReplyFiles} onSend={(ticket) => sendReply.mutate(ticket)}/>
+    {sendReply.isError && <p className="mt-3 text-sm text-red-600">{sendReply.error.message}</p>}
+  </section>;
+}
+
 export function DashboardPage() {
   const { user, organizationId, logout } = useAuth();
   const queryClient = useQueryClient();
   const [view, setView] = useState<View>("overview");
   const [name, setName] = useState("");
   const [copiedBotId, setCopiedBotId] = useState("");
-  const [ticketSubject, setTicketSubject] = useState(""); const [ticketMessage, setTicketMessage] = useState("");
-  const [ticketReplies, setTicketReplies] = useState<Record<string, string>>({});
   const [telegramChatId, setTelegramChatId] = useState(""); const [telegramCode, setTelegramCode] = useState("");
   const summary = useQuery({ queryKey: ["dashboard", organizationId], queryFn: () => api<DashboardSummary>("/dashboard/summary"), enabled: !!organizationId });
   const chatbots = useQuery({ queryKey: ["chatbots", organizationId], queryFn: () => api<Chatbot[]>("/chatbots"), enabled: !!organizationId });
@@ -99,7 +144,6 @@ export function DashboardPage() {
   const conversations = useQuery({ queryKey: ["conversations", organizationId], queryFn: () => api<Page<Conversation>>("/conversations"), enabled: !!organizationId && view === "conversations" });
   const leads = useQuery({ queryKey: ["leads", organizationId], queryFn: () => api<Page<Lead>>("/leads"), enabled: !!organizationId && view === "leads" });
   const telegramStatus = useQuery({ queryKey: ["telegram", organizationId], queryFn: () => api<TelegramStatus>("/telegram/status"), enabled: !!organizationId && view === "settings" });
-  const tickets = useQuery({ queryKey: ["tickets", organizationId], queryFn: () => api<SupportTicket[]>("/tickets"), enabled: !!organizationId && view === "support" });
   const create = useMutation({ mutationFn: (chatbotName: string) => api<Chatbot>("/chatbots", { method: "POST", body: { name: chatbotName } }), onSuccess: () => { setName(""); queryClient.invalidateQueries({ queryKey: ["chatbots", organizationId] }); queryClient.invalidateQueries({ queryKey: ["dashboard", organizationId] }); } });
   const allocateCredits = useMutation({ mutationFn: ({ id, amount }: { id: string; amount: number }) => api<Chatbot>(`/chatbots/${id}/credits`, { method: "POST", body: { amount } }), onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["chatbots", organizationId] }); queryClient.invalidateQueries({ queryKey: ["credit-balance"] }); queryClient.invalidateQueries({ queryKey: ["dashboard", organizationId] }); } });
   const upload = useMutation({ mutationFn: (file: File) => { const form = new FormData(); form.append("file", file); return uploadApi<DocumentItem>("/documents", form); }, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["documents", organizationId] }); queryClient.invalidateQueries({ queryKey: ["dashboard", organizationId] }); } });
@@ -107,8 +151,6 @@ export function DashboardPage() {
   const updateLead = useMutation({ mutationFn: ({ id, status }: { id: string; status: Lead["status"] }) => api<Lead>(`/leads/${id}`, { method: "PATCH", body: { status } }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["leads", organizationId] }) });
   const telegramChallenge = useMutation({ mutationFn: () => api<{ detail: string }>("/telegram/challenge", { method: "POST", body: { chat_id: telegramChatId } }) });
   const telegramConfirm = useMutation({ mutationFn: () => api<TelegramStatus>("/telegram/confirm", { method: "POST", body: { code: telegramCode } }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ["telegram", organizationId] }) });
-  const createTicket = useMutation({ mutationFn: () => api<SupportTicket>("/tickets", { method: "POST", body: { subject: ticketSubject, message: ticketMessage } }), onSuccess: () => { setTicketSubject(""); setTicketMessage(""); queryClient.invalidateQueries({ queryKey: ["tickets", organizationId] }); } });
-  const replyTicket = useMutation({ mutationFn: ({ id, message }: { id: string; message: string }) => api<SupportTicket>(`/tickets/${id}/replies`, { method: "POST", body: { message } }), onSuccess: (_data, variables) => { setTicketReplies((old) => ({ ...old, [variables.id]: "" })); queryClient.invalidateQueries({ queryKey: ["tickets", organizationId] }); } });
   if (!user || !organizationId) return <Navigate to="/login" replace/>;
 
   const metrics: Array<[LucideIcon, string, number]> = summary.data ? [
@@ -131,7 +173,7 @@ export function DashboardPage() {
         {view === "conversations" && <section><h2 className="text-3xl font-black">Cuộc trò chuyện</h2><p className="mt-2 text-slate-600">Lịch sử thực thuộc doanh nghiệp của bạn.</p>{conversations.data?.total === 0 && <StateMessage>Chưa có cuộc trò chuyện.</StateMessage>}<div className="mt-6 space-y-3">{conversations.data?.items.map((item) => <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex justify-between gap-3"><p className="font-mono text-sm">{item.id}</p><span className="text-xs font-bold text-emerald-700">{item.status}</span></div><p className="mt-2 text-sm text-slate-500">{new Date(item.created_at).toLocaleString("vi-VN")}</p></article>)}</div></section>}
         {view === "leads" && <section><h2 className="text-3xl font-black">Khách hàng tiềm năng</h2><p className="mt-2 text-slate-600">Thông tin khách tự nguyện cung cấp qua widget.</p>{leads.data?.total === 0 && <StateMessage>Chưa có lead.</StateMessage>}<div className="mt-6 grid gap-4 xl:grid-cols-2">{leads.data?.items.map((lead) => <article key={lead.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-start justify-between gap-4"><div><h3 className="font-bold">{lead.customer_name || "Khách chưa đặt tên"}</h3><p className="mt-1 text-sm text-slate-500">{lead.phone || lead.email}</p></div><select value={lead.status} onChange={(event) => updateLead.mutate({ id: lead.id, status: event.target.value as Lead["status"] })} className="rounded-lg border border-slate-300 p-2 text-sm"><option value="NEW">Mới</option><option value="CONTACTED">Đã liên hệ</option><option value="QUALIFIED">Tiềm năng</option><option value="CLOSED">Đã chốt</option><option value="LOST">Không thành công</option></select></div>{lead.intent_summary && <p className="mt-4 text-sm text-slate-600">{lead.intent_summary}</p>}</article>)}</div></section>}
         {view === "payment" && <PaymentPanel/>}
-        {view === "support" && <section><h2 className="text-3xl font-black">Hỗ trợ</h2><p className="mt-2 text-slate-600">Tạo ticket để đội ngũ quản trị hỗ trợ trực tiếp.</p><form onSubmit={(event) => { event.preventDefault(); if (ticketSubject.trim() && ticketMessage.trim()) createTicket.mutate(); }} className="mt-6 max-w-2xl space-y-3 rounded-2xl border border-slate-200 bg-white p-5"><input value={ticketSubject} onChange={(event) => setTicketSubject(event.target.value)} placeholder="Tiêu đề vấn đề" maxLength={200} className="w-full rounded-xl border border-slate-300 px-4 py-3"/><textarea value={ticketMessage} onChange={(event) => setTicketMessage(event.target.value)} placeholder="Mô tả chi tiết vấn đề cần hỗ trợ..." maxLength={5000} rows={4} className="w-full rounded-xl border border-slate-300 px-4 py-3"/><button disabled={createTicket.isPending || ticketSubject.trim().length < 3 || ticketMessage.trim().length < 5} className="rounded-xl bg-blue-600 px-5 py-3 font-bold text-white disabled:opacity-40">{createTicket.isPending ? "Đang gửi..." : "Gửi ticket"}</button>{createTicket.isError && <p className="text-sm text-red-600">{createTicket.error.message}</p>}</form><div className="mt-6 space-y-4">{tickets.data?.map((ticket) => <article key={ticket.id} className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-black">{ticket.subject}</h3><p className="text-sm text-slate-500">Cập nhật {new Date(ticket.updated_at).toLocaleString("vi-VN")}</p></div><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{ticket.status}</span></div><div className="mt-4 space-y-2">{ticket.messages.map((message, index) => <div key={index} className={`rounded-xl p-3 text-sm ${message.sender_type === "ADMIN" ? "ml-8 bg-blue-50" : "mr-8 bg-slate-100"}`}><b>{message.sender_name}</b><p className="mt-1 whitespace-pre-wrap">{message.message}</p></div>)}</div>{ticket.status !== "CLOSED" && <div className="mt-4 flex gap-2"><input value={ticketReplies[ticket.id] ?? ""} onChange={(event) => setTicketReplies((old) => ({ ...old, [ticket.id]: event.target.value }))} placeholder="Phản hồi Admin..." className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-2"/><button disabled={!ticketReplies[ticket.id]?.trim() || replyTicket.isPending} onClick={() => replyTicket.mutate({ id: ticket.id, message: ticketReplies[ticket.id].trim() })} className="rounded-xl bg-slate-950 px-4 py-2 font-bold text-white disabled:opacity-40">Gửi</button></div>}</article>)}</div></section>}
+        {view === "support" && <CustomerSupportPanel organizationId={organizationId}/>}
         {view === "settings" && <section><h2 className="text-3xl font-black">Cài đặt</h2><p className="mt-2 text-slate-600">Kết nối nơi nhận thông báo lead theo từng doanh nghiệp.</p><article className="mt-6 max-w-2xl rounded-2xl border border-slate-200 bg-white p-6"><h3 className="text-xl font-black">Telegram</h3><p className="mt-2 text-sm text-slate-600">Trạng thái: {telegramStatus.data?.enabled ? `Đã xác minh ${telegramStatus.data.chat_id_hint}` : "Chưa kết nối"}</p><div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]"><input value={telegramChatId} onChange={(event) => setTelegramChatId(event.target.value)} placeholder="Telegram Chat ID" className="rounded-xl border border-slate-300 px-4 py-3"/><button onClick={() => telegramChallenge.mutate()} disabled={!telegramChatId.trim() || telegramChallenge.isPending} className="rounded-xl bg-slate-950 px-4 py-3 font-bold text-white">Gửi mã xác minh</button></div>{telegramChallenge.isSuccess && <p className="mt-3 text-sm text-emerald-700">Mã đã được gửi. Nhập mã nhận được bên dưới.</p>}<div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]"><input value={telegramCode} onChange={(event) => setTelegramCode(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Mã 6 chữ số" className="rounded-xl border border-slate-300 px-4 py-3"/><button onClick={() => telegramConfirm.mutate()} disabled={telegramCode.length !== 6 || telegramConfirm.isPending} className="rounded-xl bg-blue-600 px-4 py-3 font-bold text-white">Xác nhận</button></div>{(telegramChallenge.isError || telegramConfirm.isError) && <p className="mt-3 text-sm text-red-600">{telegramChallenge.error?.message || telegramConfirm.error?.message}</p>}</article></section>}
       </div>
     </main>

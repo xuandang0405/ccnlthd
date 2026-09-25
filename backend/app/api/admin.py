@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 
 from app.api.deps import get_super_admin
 from app.core.mongodb import get_mongo_db, new_document, record
@@ -23,6 +24,11 @@ from app.schemas.admin import (
 )
 from app.schemas.ticket import TicketReplyCreate, TicketResponse, TicketStatusUpdate
 from app.services.document_review import review_catalog
+from app.services.ticket_attachments import (
+    attachment_path,
+    find_attachment,
+    save_ticket_files,
+)
 
 router = APIRouter(prefix="/admin", tags=["Super Admin"])
 
@@ -47,6 +53,7 @@ async def summary(_: Any = Depends(get_super_admin), db: Any = Depends(get_mongo
         tickets_open=await db.support_tickets.count_documents(
             {"status": {"$in": ["OPEN", "IN_PROGRESS"]}}
         ),
+        tickets_unread=await db.support_tickets.count_documents({"admin_unread_count": {"$gt": 0}}),
     )
 
 
@@ -304,19 +311,39 @@ async def all_payments(_: Any = Depends(get_super_admin), db: Any = Depends(get_
     ]
 
 
-def _ticket_response(item: dict[str, Any], name: str | None = None) -> dict:
-    return {
+def _ticket_response(
+    item: dict[str, Any], name: str | None = None, creator: dict[str, Any] | None = None
+) -> dict:
+    response = {
         "id": item["_id"],
         **{k: v for k, v in item.items() if k != "_id"},
         "organization_name": name,
     }
+    if creator:
+        response["created_by_email"] = response.get("created_by_email") or creator.get("email")
+        response["created_by_name"] = response.get("created_by_name") or creator.get("full_name")
+    return response
 
 
 @router.get("/tickets", response_model=list[TicketResponse])
 async def all_tickets(_: Any = Depends(get_super_admin), db: Any = Depends(get_mongo_db)):
     names = await organization_names(db)
     documents = await db.support_tickets.find({}).sort("updated_at", -1).limit(500).to_list(None)
-    return [_ticket_response(item, names.get(item["organization_id"])) for item in documents]
+    creator_ids = list(
+        {item.get("created_by_user_id") for item in documents if item.get("created_by_user_id")}
+    )
+    creators = {
+        item["_id"]: item
+        for item in await db.users.find({"_id": {"$in": creator_ids}}).to_list(None)
+    }
+    return [
+        _ticket_response(
+            item,
+            names.get(item["organization_id"]),
+            creators.get(item.get("created_by_user_id")),
+        )
+        for item in documents
+    ]
 
 
 @router.post("/tickets/{ticket_id}/replies", response_model=TicketResponse)
@@ -337,9 +364,11 @@ async def admin_ticket_reply(
                     "sender_name": admin.full_name,
                     "message": payload.message.strip(),
                     "created_at": now,
+                    "attachments": [],
                 }
             },
             "$set": {"status": "IN_PROGRESS", "updated_at": now},
+            "$inc": {"customer_unread_count": 1},
         },
     )
     if not result.matched_count:
@@ -347,6 +376,80 @@ async def admin_ticket_reply(
     item = await db.support_tickets.find_one({"_id": str(ticket_id)})
     names = await organization_names(db)
     return _ticket_response(item, names.get(item["organization_id"]))
+
+
+@router.post("/tickets/{ticket_id}/attachments", response_model=TicketResponse)
+async def admin_ticket_attachment(
+    ticket_id: UUID,
+    files: list[UploadFile] = File(),
+    message: str = Form(default=""),
+    admin: Any = Depends(get_super_admin),
+    db: Any = Depends(get_mongo_db),
+):
+    query = {"_id": str(ticket_id)}
+    ticket = await db.support_tickets.find_one(query)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
+    clean_message = message.strip()
+    if len(clean_message) > 5000:
+        raise HTTPException(status_code=422, detail="Tin nhắn tối đa 5000 ký tự")
+    attachments = await save_ticket_files(files, ticket["organization_id"], str(ticket_id))
+    now = datetime.now(UTC)
+    await db.support_tickets.update_one(
+        query,
+        {
+            "$push": {
+                "messages": {
+                    "sender_type": "ADMIN",
+                    "sender_user_id": str(admin.id),
+                    "sender_name": admin.full_name,
+                    "message": clean_message,
+                    "created_at": now,
+                    "attachments": attachments,
+                }
+            },
+            "$set": {"status": "IN_PROGRESS", "updated_at": now},
+            "$inc": {"customer_unread_count": 1},
+        },
+    )
+    item = await db.support_tickets.find_one(query)
+    names = await organization_names(db)
+    return _ticket_response(item, names.get(item["organization_id"]))
+
+
+@router.patch("/tickets/{ticket_id}/read", response_model=TicketResponse)
+async def mark_admin_ticket_read(
+    ticket_id: UUID,
+    _: Any = Depends(get_super_admin),
+    db: Any = Depends(get_mongo_db),
+):
+    query = {"_id": str(ticket_id)}
+    result = await db.support_tickets.update_one(query, {"$set": {"admin_unread_count": 0}})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
+    item = await db.support_tickets.find_one(query)
+    names = await organization_names(db)
+    return _ticket_response(item, names.get(item["organization_id"]))
+
+
+@router.get("/tickets/{ticket_id}/attachments/{attachment_id}")
+async def admin_download_ticket_attachment(
+    ticket_id: UUID,
+    attachment_id: UUID,
+    _: Any = Depends(get_super_admin),
+    db: Any = Depends(get_mongo_db),
+):
+    ticket = await db.support_tickets.find_one({"_id": str(ticket_id)})
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Không tìm thấy ticket")
+    attachment = find_attachment(ticket, str(attachment_id))
+    inline = attachment["mime_type"].startswith("image/")
+    return FileResponse(
+        attachment_path(attachment["storage_key"]),
+        media_type=attachment["mime_type"],
+        filename=attachment["original_name"],
+        content_disposition_type="inline" if inline else "attachment",
+    )
 
 
 @router.patch("/tickets/{ticket_id}/status", response_model=TicketResponse)

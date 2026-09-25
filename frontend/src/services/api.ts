@@ -58,3 +58,15 @@ export async function uploadApi<T>(path: string, form: FormData): Promise<T> {
   }
   return payload as T;
 }
+
+export async function downloadApi(path: string): Promise<Blob> {
+  const headers = new Headers({ Accept: "*/*" });
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  if (organizationId) headers.set("X-Organization-ID", organizationId);
+  const response = await request(`${API_BASE}/v1${path}`, { headers });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new ApiError(typeof payload.detail === "string" ? payload.detail : "Không tải được tệp", response.status);
+  }
+  return response.blob();
+}

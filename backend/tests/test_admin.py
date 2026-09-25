@@ -85,6 +85,29 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client):
     listed = await client.get("/api/v1/admin/tickets", headers=admin_headers)
     assert listed.status_code == 200
     assert listed.json()[0]["organization_name"] == "Portal Customer"
+    assert listed.json()[0]["created_by_email"] == "portal-customer@example.com"
+    assert listed.json()[0]["created_by_user_id"] == customer_me["id"]
+    assert listed.json()[0]["admin_unread_count"] == 1
+    marked_read = await client.patch(
+        f"/api/v1/admin/tickets/{ticket_id}/read", headers=admin_headers
+    )
+    assert marked_read.status_code == 200
+    assert marked_read.json()["admin_unread_count"] == 0
+    attachment = await client.post(
+        f"/api/v1/tickets/{ticket_id}/attachments",
+        headers=customer_headers,
+        data={"message": "Ảnh lỗi trên màn hình"},
+        files={"files": ("loi.png", b"\x89PNG\r\n\x1a\nimage-data", "image/png")},
+    )
+    assert attachment.status_code == 200, attachment.text
+    attachment_data = attachment.json()["messages"][-1]["attachments"][0]
+    assert attachment_data["original_name"] == "loi.png"
+    downloaded = await client.get(
+        f"/api/v1/admin/tickets/{ticket_id}/attachments/{attachment_data['id']}",
+        headers=admin_headers,
+    )
+    assert downloaded.status_code == 200
+    assert downloaded.content.startswith(b"\x89PNG")
     replied = await client.post(
         f"/api/v1/admin/tickets/{ticket_id}/replies",
         headers=admin_headers,

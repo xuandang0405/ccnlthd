@@ -13,8 +13,17 @@ if /I "%~1"=="server" goto :server
 
 :local
 echo [MODE] LOCAL TEST
-echo        Frontend : http://127.0.0.1:5173
-echo        Backend  : http://127.0.0.1:8001
+echo.
+echo [CAC LINK CUA DU AN]
+echo        Trang chu          : http://127.0.0.1:5173/
+echo        Dang nhap User     : http://127.0.0.1:5173/login
+echo        Dashboard User     : http://127.0.0.1:5173/app
+echo        Trang quan tri     : http://127.0.0.1:5173/admin
+echo        Test Widget        : http://127.0.0.1:5173/widget-test.html
+echo        Widget Script      : http://127.0.0.1:5173/widget.js
+echo        Tai lieu API       : http://127.0.0.1:8001/docs
+echo        Kiem tra Backend   : http://127.0.0.1:8001/health/ready
+echo.
 echo        Database : MongoDB Atlas / ai_sales_assistant_local
 echo        Log se hien truc tiep trong cua so nay.
 echo        GIU CUA SO NAY MO DE WEBSITE HOAT DONG.
@@ -25,12 +34,20 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\run-loc
 if errorlevel 1 goto :failed
 
 echo.
-echo [OK] Toan bo dich vu local da dung.
+echo [THONG TIN] Phien run.bat da ket thuc.
 exit /b 0
 
 :server
 echo [MODE] PRODUCTION SERVER
-echo        Website: https://seminar.bkpvp.top
+echo.
+echo [CAC LINK PRODUCTION]
+echo        Trang chu          : https://seminar.bkpvp.top/
+echo        Dang nhap User     : https://seminar.bkpvp.top/login
+echo        Dashboard User     : https://seminar.bkpvp.top/app
+echo        Trang quan tri     : https://seminar.bkpvp.top/admin
+echo        Test Widget        : https://seminar.bkpvp.top/widget-test.html
+echo        Widget Script      : https://seminar.bkpvp.top/widget.js
+echo        Tai lieu API local : http://127.0.0.1:8000/docs
 echo.
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0deployment\run-server.ps1"
