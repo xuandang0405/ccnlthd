@@ -21,6 +21,12 @@ async def test_super_admin_access_is_server_enforced(client):
     assert organizations.status_code == 200
     assert organizations.json()[0]["id"] == me["organizations"][0]["id"]
 
+    await db.users.update_one(
+        {"email": "admin@example.com"}, {"$set": {"is_super_admin": False}}
+    )
+    demoted = await client.get("/api/v1/admin/summary", headers=auth)
+    assert demoted.status_code == 403
+
 
 async def test_admin_manages_chatbots_documents_moderation_and_tickets(client):
     admin_tokens, _ = await register(client, "portal-admin@example.com", "Portal Admin")
