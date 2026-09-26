@@ -169,9 +169,18 @@ async def create_public_lead(
 
 
 async def retrieve_context(db: Any, organization_id: str, chatbot_id: str, question: str):
-    terms = sorted({word.lower() for word in question.split() if len(word) >= 3})[:8]
-    if not terms:
-        return "", []
+    ignored_terms = {
+        "bao", "bạn", "cho", "chưa", "còn", "của", "đang", "được", "giá", "hiện",
+        "không", "mình", "nào", "nhiêu", "phẩm", "sản", "tại", "trang", "trên", "tôi",
+        "với", "website",
+    }
+    terms = sorted(
+        {
+            word.lower()
+            for word in re.findall(r"\w+", question, flags=re.UNICODE)
+            if len(word) >= 3 and word.lower() not in ignored_terms
+        }
+    )[:8]
     relations = await db.chatbot_documents.find(
         {"organization_id": organization_id, "chatbot_id": chatbot_id}, {"document_id": 1}
     ).to_list(None)
@@ -189,26 +198,40 @@ async def retrieve_context(db: Any, organization_id: str, chatbot_id: str, quest
     ).to_list(None)
     document_map = {item["_id"]: item for item in documents}
     if not document_map:
-        return "", []
-    pattern = "|".join(re.escape(term) for term in terms)
-    rows = (
-        await db.document_chunks.find(
-            {
-                "organization_id": organization_id,
-                "document_id": {"$in": list(document_map)},
-                "content": {"$regex": pattern, "$options": "i"},
-            }
+        return "", [], False
+    rows = []
+    if terms:
+        pattern = "|".join(re.escape(term) for term in terms)
+        rows = (
+            await db.document_chunks.find(
+                {
+                    "organization_id": organization_id,
+                    "document_id": {"$in": list(document_map)},
+                    "content": {"$regex": pattern, "$options": "i"},
+                }
+            )
+            .limit(8)
+            .to_list(None)
         )
-        .limit(8)
-        .to_list(None)
-    )
+    match_found = bool(rows)
+    if not rows:
+        rows = (
+            await db.document_chunks.find(
+                {
+                    "organization_id": organization_id,
+                    "document_id": {"$in": list(document_map)},
+                }
+            )
+            .limit(4)
+            .to_list(None)
+        )
     context = "\n\n".join(item["content"] for item in rows)
     source_ids = list(dict.fromkeys(item["document_id"] for item in rows))
     sources = [
         SourceReference(document_id=item, document_name=document_map[item]["original_name"])
         for item in source_ids
     ]
-    return context, sources
+    return context, sources, match_found
 
 
 @router.post("/{public_id}/messages", response_model=PublicChatResponse)
@@ -238,11 +261,16 @@ async def send_message(
     except CreditUnavailableError as exc:
         raise HTTPException(status_code=402, detail=str(exc)) from exc
     response.headers["X-Credit-Remaining"] = str(credit.remaining)
-    context, sources = await retrieve_context(
+    context, sources, match_found = await retrieve_context(
         db, chatbot.organization_id, chatbot.id, payload.message
     )
     try:
-        reply = await gemini.generate(question=payload.message, context=context, tone=chatbot.tone)
+        reply = await gemini.generate(
+            question=payload.message,
+            context=context,
+            tone=chatbot.tone,
+            match_found=match_found,
+        )
     except GeminiServiceError as exc:
         await refund_credit(db, chatbot.organization_id, chatbot.id, credit.source)
         raise HTTPException(status_code=502, detail=str(exc)) from exc

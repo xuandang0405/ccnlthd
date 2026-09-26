@@ -18,9 +18,12 @@ class FakeRedis:
 
 
 class FakeGemini:
-    async def generate(self, *, question: str, context: str, tone: str) -> str:
+    async def generate(
+        self, *, question: str, context: str, tone: str, match_found: bool = True
+    ) -> str:
         assert question
         assert tone == "professional"
+        assert match_found is False
         return "Tôi chưa có thông tin chính xác trong tài liệu doanh nghiệp."
 
 
