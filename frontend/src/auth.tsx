@@ -30,13 +30,21 @@ function readSavedSession(): Tokens | null {
     if (item) raw = decodeURIComponent(item.slice(prefix.length));
   }
   if (!raw) return null;
-  try { return JSON.parse(raw) as Tokens; } catch { return null; }
+  try {
+    const tokens = JSON.parse(raw) as Tokens;
+    if (!tokens.session_expires_at || new Date(tokens.session_expires_at).getTime() <= Date.now()) {
+      clearSession();
+      return null;
+    }
+    return tokens;
+  } catch { return null; }
 }
 
 function saveSession(tokens: Tokens) {
   const raw = JSON.stringify(tokens);
   try { window.localStorage.setItem(SESSION_KEY, raw); } catch { /* Cookie remains available. */ }
-  document.cookie = `${SESSION_KEY}=${encodeURIComponent(raw)}; Path=/; Max-Age=604800; SameSite=Strict`;
+  const maxAge = Math.max(0, Math.floor((new Date(tokens.session_expires_at).getTime() - Date.now()) / 1000));
+  document.cookie = `${SESSION_KEY}=${encodeURIComponent(raw)}; Path=/; Max-Age=${maxAge}; SameSite=Strict`;
 }
 
 function clearSession() {
@@ -145,6 +153,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, refreshIn);
     return () => window.clearTimeout(timer);
   }, [tokens, organizationId]);
+
+  useEffect(() => {
+    if (!tokens) return;
+    const remaining = new Date(tokens.session_expires_at).getTime() - Date.now();
+    const expire = () => {
+      configureApi(null, null);
+      clearSession();
+      setTokens(null);
+      setUser(null);
+      setOrganizationId(null);
+    };
+    if (remaining <= 0) { expire(); return; }
+    const timer = window.setTimeout(expire, remaining);
+    return () => window.clearTimeout(timer);
+  }, [tokens]);
 
   async function acceptTokens(next: Tokens) {
     const { current, organizationId: org } = await resolveSession(next);

@@ -7,7 +7,7 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.mongodb import MongoRecord, get_mongo_db, record
-from app.core.security import decode_access_token, ensure_utc
+from app.core.security import decode_access_token, session_expiration
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -36,7 +36,7 @@ async def get_current_user(
         not session
         or session.get("user_id") != str(user_id)
         or session.get("revoked_at") is not None
-        or ensure_utc(session["expires_at"]) <= datetime.now(UTC)
+        or session_expiration(session) <= datetime.now(UTC)
         or not user_document
         or not user_document.get("is_active", False)
     ):

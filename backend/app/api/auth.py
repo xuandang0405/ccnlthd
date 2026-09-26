@@ -17,6 +17,7 @@ from app.core.security import (
     ensure_utc,
     hash_password,
     new_refresh_token,
+    session_expiration,
     verify_password,
 )
 from app.integrations.email import EmailConfigurationError, send_password_reset
@@ -41,13 +42,21 @@ def slugify(name: str) -> str:
     return slug[:80] or "doanh-nghiep"
 
 
-async def issue_tokens(db: Any, user: MongoRecord, session: Any = None) -> TokenResponse:
+async def issue_tokens(
+    db: Any,
+    user: MongoRecord,
+    session: Any = None,
+    session_expires_at: datetime | None = None,
+) -> TokenResponse:
     settings = get_settings()
+    absolute_expiry = session_expires_at or (
+        datetime.now(UTC) + timedelta(hours=settings.login_session_hours)
+    )
     refresh_plain, refresh_digest = new_refresh_token()
     login_session = new_document(
         user_id=str(user.id),
         token_digest=refresh_digest,
-        expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_token_days),
+        expires_at=absolute_expiry,
         revoked_at=None,
     )
     await db.refresh_sessions.insert_one(login_session, session=session)
@@ -56,6 +65,7 @@ async def issue_tokens(db: Any, user: MongoRecord, session: Any = None) -> Token
         access_token=access,
         refresh_token=refresh_plain,
         expires_at=expires_at,
+        session_expires_at=absolute_expiry,
     )
 
 
@@ -140,7 +150,7 @@ async def refresh(payload: RefreshRequest, db: Any = Depends(get_mongo_db)):
     if (
         not session
         or session.get("revoked_at") is not None
-        or ensure_utc(session["expires_at"]) <= now
+        or session_expiration(session) <= now
     ):
         raise HTTPException(status_code=401, detail="Refresh token không hợp lệ")
     user_document = await db.users.find_one({"_id": session["user_id"]})
@@ -149,7 +159,11 @@ async def refresh(payload: RefreshRequest, db: Any = Depends(get_mongo_db)):
     await db.refresh_sessions.update_one(
         {"_id": session["_id"], "revoked_at": None}, {"$set": {"revoked_at": now}}
     )
-    return await issue_tokens(db, record(user_document))
+    return await issue_tokens(
+        db,
+        record(user_document),
+        session_expires_at=session_expiration(session),
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

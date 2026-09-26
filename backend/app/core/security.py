@@ -1,6 +1,8 @@
 import hashlib
 import secrets
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from jose import JWTError, jwt
@@ -59,3 +61,12 @@ def ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def session_expiration(session: Mapping[str, Any]) -> datetime:
+    """Return the configured absolute expiry, including for older long-lived sessions."""
+    settings = get_settings()
+    stored_expiry = ensure_utc(session["expires_at"])
+    created_at = ensure_utc(session.get("created_at", stored_expiry))
+    configured_expiry = created_at + timedelta(hours=settings.login_session_hours)
+    return min(stored_expiry, configured_expiry)

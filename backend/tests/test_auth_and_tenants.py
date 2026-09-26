@@ -31,6 +31,8 @@ async def test_register_login_refresh_and_logout(client: AsyncClient):
     tokens, me = await register(client, "owner@example.com", "Công ty Alpha")
     assert me["email"] == "owner@example.com"
     assert me["organizations"][0]["role"] == "BUSINESS_OWNER"
+    session_lifetime = datetime.fromisoformat(tokens["session_expires_at"]) - datetime.now(UTC)
+    assert timedelta(hours=3, minutes=59) < session_lifetime <= timedelta(hours=4)
 
     login = await client.post(
         "/api/v1/auth/login",
@@ -43,6 +45,9 @@ async def test_register_login_refresh_and_logout(client: AsyncClient):
     )
     assert refreshed.status_code == 200, refreshed.text
     assert refreshed.json()["refresh_token"] != tokens["refresh_token"]
+    refreshed_expiry = datetime.fromisoformat(refreshed.json()["session_expires_at"])
+    original_expiry = datetime.fromisoformat(tokens["session_expires_at"])
+    assert abs(refreshed_expiry - original_expiry) < timedelta(milliseconds=1)
 
     reused = await client.post(
         "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
@@ -50,6 +55,25 @@ async def test_register_login_refresh_and_logout(client: AsyncClient):
     assert reused.status_code == 401
 
 
+async def test_session_has_an_absolute_four_hour_limit(client: AsyncClient):
+    tokens, _ = await register(client, "expired-session@example.com", "Expired Session")
+    db = get_mongo_database()
+    await db.refresh_sessions.update_one(
+        {"token_digest": digest_token(tokens["refresh_token"])},
+        {
+            "$set": {
+                "created_at": datetime.now(UTC) - timedelta(hours=5),
+                "expires_at": datetime.now(UTC) + timedelta(days=1),
+            }
+        },
+    )
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+    assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 401
+    assert (
+        await client.post(
+            "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+        )
+    ).status_code == 401
 async def test_chatbot_crud_is_tenant_isolated(client: AsyncClient):
     alpha_tokens, alpha_me = await register(client, "alpha@example.com", "Alpha")
     beta_tokens, beta_me = await register(client, "beta@example.com", "Beta")

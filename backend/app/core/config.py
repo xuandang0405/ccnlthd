@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     app_domain: str = "localhost"
     access_token_minutes: int = Field(default=15, ge=5, le=120)
-    refresh_token_days: int = Field(default=30, ge=1, le=90)
+    login_session_hours: int = Field(default=4, ge=1, le=24)
 
     database_url: str = "sqlite+aiosqlite:///./sales_assistant.db"
     database_backend: Literal["sql", "mongodb"] = "mongodb"

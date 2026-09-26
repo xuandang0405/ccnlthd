@@ -75,6 +75,7 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_at: datetime
+    session_expires_at: datetime
 
 
 class OrganizationSummary(BaseModel):

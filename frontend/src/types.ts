@@ -13,6 +13,7 @@ export type Tokens = {
   refresh_token: string;
   token_type: string;
   expires_at: string;
+  session_expires_at: string;
 };
 
 export type DashboardSummary = {
