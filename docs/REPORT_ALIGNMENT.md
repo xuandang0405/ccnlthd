@@ -1,5 +1,7 @@
 # Đối chiếu báo cáo mới
 
+> Tài liệu lưu trữ của giai đoạn trước. Các mô tả SQLite/Redis, quota theo ngày và chế độ fallback `run.bat` bên dưới không còn phản ánh bản MongoDB/worker/credit hiện tại. Dùng `README.md`, `docs/INSTALLATION.md`, `docs/API.md` và `docs/QUALITY.md` cho triển khai và kiểm thử hiện tại.
+
 Nguồn đối chiếu: `Các_công_nghệ_lập_trình_hiện_đại (1).pdf`, 136 trang, SHA-256 `8141C7A706A71DDD70C724875249A11E61CCA8578A40E8A9F5C44FB3AC0A5C88`.
 
 ## Nội dung đã đồng bộ

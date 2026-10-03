@@ -144,8 +144,26 @@ async def delete_chatbot(
 ):
     chatbot = await owned_chatbot(db, chatbot_id, context.organization.id)
     chatbot_id_value = str(chatbot.id)
-    await db.chatbots.delete_one({"_id": chatbot_id_value})
-    await db.chatbot_documents.delete_many({"chatbot_id": chatbot_id_value})
+    organization_id = str(context.organization.id)
+    await ensure_credit_account(db, organization_id)
+    async with db.client.start_session() as session:
+        async with await session.start_transaction():
+            deleted = await db.chatbots.find_one_and_delete(
+                {"_id": chatbot_id_value, "organization_id": organization_id},
+                session=session,
+            )
+            if deleted is None:
+                raise HTTPException(status_code=404, detail="Không tìm thấy chatbot")
+            remaining = int(deleted.get("credit_balance", 0))
+            if remaining:
+                await db.organization_credits.update_one(
+                    {"organization_id": organization_id},
+                    {"$inc": {"purchased_remaining": remaining}},
+                    session=session,
+                )
+            await db.chatbot_documents.delete_many(
+                {"chatbot_id": chatbot_id_value}, session=session
+            )
 
 
 @router.put("/{chatbot_id}/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -161,6 +179,7 @@ async def assign_document(
             "_id": str(document_id),
             "organization_id": str(context.organization.id),
             "status": DocumentStatus.DONE.value,
+            "approval_status": "APPROVED",
         }
     )
     if document is None:

@@ -78,18 +78,21 @@ async def consume_credit(db: Any, organization_id: str, chatbot_id: str) -> Cred
     return CreditResult(source="FREE", remaining=int(account["free_remaining"]))
 
 
-async def refund_credit(db: Any, organization_id: str, chatbot_id: str, source: str) -> None:
+async def refund_credit(db: Any, organization_id: str, chatbot_id: str, source: str) -> int:
     now = datetime.now(UTC)
     if source == "CHATBOT":
-        await db.chatbots.update_one(
+        chatbot = await db.chatbots.find_one_and_update(
             {"_id": chatbot_id},
             {"$inc": {"credit_balance": 1, "usage_count": -1}, "$set": {"updated_at": now}},
+            return_document=ReturnDocument.AFTER,
         )
-        return
-    await db.organization_credits.update_one(
+        return int(chatbot.get("credit_balance", 0)) if chatbot else 0
+    account = await db.organization_credits.find_one_and_update(
         {"organization_id": organization_id},
         {"$inc": {"free_remaining": 1}, "$set": {"updated_at": now}},
+        return_document=ReturnDocument.AFTER,
     )
     await db.chatbots.update_one(
         {"_id": chatbot_id}, {"$inc": {"usage_count": -1}, "$set": {"updated_at": now}}
     )
+    return int(account.get("free_remaining", 0)) if account else 0

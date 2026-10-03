@@ -82,7 +82,10 @@ async def ensure_mongo_indexes() -> None:
         "password_reset_tokens": [([("token_digest", ASCENDING)], True)],
         "chatbots": [([("public_id", ASCENDING)], True), (["organization_id"], False)],
         "documents": [([("storage_key", ASCENDING)], True), (["organization_id"], False)],
-        "document_chunks": [(["document_id", "chunk_index"], True)],
+        "document_chunks": [
+            (["document_id", "chunk_index"], True),
+            (["organization_id", "search_tokens"], False),
+        ],
         "chatbot_documents": [(["chatbot_id", "document_id"], True)],
         "visitor_sessions": [([("token_digest", ASCENDING)], True)],
         "conversations": [(["organization_id", "updated_at"], False)],

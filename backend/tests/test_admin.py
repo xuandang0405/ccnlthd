@@ -1,4 +1,6 @@
 from app.core.mongodb import get_mongo_database, new_document
+from app.integrations.gemini import GeminiServiceError
+from app.services.document_review import DocumentReview
 from tests.test_auth_and_tenants import register
 
 
@@ -28,7 +30,7 @@ async def test_super_admin_access_is_server_enforced(client):
     assert demoted.status_code == 403
 
 
-async def test_admin_manages_chatbots_documents_moderation_and_tickets(client):
+async def test_admin_manages_chatbots_documents_moderation_and_tickets(client, monkeypatch):
     admin_tokens, _ = await register(client, "portal-admin@example.com", "Portal Admin")
     customer_tokens, customer_me = await register(
         client, "portal-customer@example.com", "Portal Customer"
@@ -66,12 +68,39 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client):
         ai_review=None,
     )
     await db.documents.insert_one(document)
+    assert await db.chatbot_documents.count_documents({"document_id": document["_id"]}) == 0
+    disabled_review = await client.post(
+        f"/api/v1/admin/documents/{document['_id']}/ai-review", headers=admin_headers
+    )
+    assert disabled_review.status_code == 409
+    enabled = await client.put(
+        "/api/v1/admin/settings/moderation",
+        headers=admin_headers,
+        json={"auto_review": True},
+    )
+    assert enabled.status_code == 200
+
+    async def unavailable_ai(_text):
+        raise GeminiServiceError("Gemini tạm thời không phản hồi")
+
+    monkeypatch.setattr("app.api.admin.review_catalog_with_ai", unavailable_ai)
+    failed_review = await client.post(
+        f"/api/v1/admin/documents/{document['_id']}/ai-review", headers=admin_headers
+    )
+    assert failed_review.status_code == 503
+    assert (await db.documents.find_one({"_id": document["_id"]}))["approval_status"] == "PENDING"
+
+    async def approved_by_ai(_text):
+        return DocumentReview(True, 90, 1, 2, "Có sản phẩm và giá", [])
+
+    monkeypatch.setattr("app.api.admin.review_catalog_with_ai", approved_by_ai)
     ai_review = await client.post(
         f"/api/v1/admin/documents/{document['_id']}/ai-review", headers=admin_headers
     )
     assert ai_review.status_code == 200, ai_review.text
     assert ai_review.json()["ai_review"]["score"] >= 70
     assert ai_review.json()["approval_status"] == "APPROVED"
+    assert await db.chatbot_documents.count_documents({"document_id": document["_id"]}) == 1
 
     moderation = await client.put(
         "/api/v1/admin/settings/moderation",
@@ -80,6 +109,16 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client):
     )
     assert moderation.status_code == 200
     assert moderation.json()["auto_review"] is False
+    user_document = await client.get("/api/v1/documents", headers=customer_headers)
+    assert user_document.json()[0]["approval_status"] == "PENDING"
+    assert await db.chatbot_documents.count_documents({"document_id": document["_id"]}) == 0
+    manual = await client.patch(
+        f"/api/v1/admin/documents/{document['_id']}/approval",
+        headers=admin_headers,
+        json={"approval_status": "APPROVED"},
+    )
+    assert manual.status_code == 200, manual.text
+    assert await db.chatbot_documents.count_documents({"document_id": document["_id"]}) == 1
 
     ticket = await client.post(
         "/api/v1/tickets",
@@ -129,3 +168,194 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client):
     )
     assert resolved.status_code == 200
     assert resolved.json()["status"] == "RESOLVED"
+
+
+async def test_admin_can_grant_and_reclaim_user_and_chatbot_credits(client):
+    admin_tokens, _ = await register(client, "credits-admin@example.com", "Admin Company")
+    customer_tokens, customer = await register(
+        client, "credits-customer@example.com", "Customer Company"
+    )
+    db = get_mongo_database()
+    await db.users.update_one(
+        {"email": "credits-admin@example.com"}, {"$set": {"is_super_admin": True}}
+    )
+    admin_headers = {"Authorization": f"Bearer {admin_tokens['access_token']}"}
+    customer_headers = {
+        "Authorization": f"Bearer {customer_tokens['access_token']}",
+        "X-Organization-ID": customer["organizations"][0]["id"],
+    }
+    organization_id = customer["organizations"][0]["id"]
+    user_id = customer["id"]
+    bot = await client.post(
+        "/api/v1/chatbots", headers=customer_headers, json={"name": "Bot khách hàng"}
+    )
+    assert bot.status_code == 201
+    bot_id = bot.json()["id"]
+
+    denied = await client.post(
+        f"/api/v1/admin/users/{user_id}/credits",
+        headers=customer_headers,
+        json={"organization_id": organization_id, "amount": 75, "reason": "Hỗ trợ thử nghiệm"},
+    )
+    assert denied.status_code == 403
+    assert (
+        await client.get("/api/v1/admin/audit-logs", headers=customer_headers)
+    ).status_code == 403
+    granted = await client.post(
+        f"/api/v1/admin/users/{user_id}/credits",
+        headers=admin_headers,
+        json={"organization_id": organization_id, "amount": 75, "reason": "Hỗ trợ thử nghiệm"},
+    )
+    assert granted.status_code == 200, granted.text
+    assert granted.json()["purchased_remaining"] == 75
+    users = await client.get("/api/v1/admin/users", headers=admin_headers)
+    customer_row = next(item for item in users.json() if item["id"] == user_id)
+    assert customer_row["organization_accounts"][0]["purchased_remaining"] == 75
+    searched_users = await client.get(
+        "/api/v1/admin/users?search=credits-customer", headers=admin_headers
+    )
+    assert [item["id"] for item in searched_users.json()] == [user_id]
+    dashboard = await client.get("/api/v1/dashboard/summary", headers=customer_headers)
+    assert dashboard.json()["purchased_credits_remaining"] == 75
+
+    reclaimed = await client.post(
+        f"/api/v1/admin/users/{user_id}/credits",
+        headers=admin_headers,
+        json={"organization_id": organization_id, "amount": -25, "reason": "Điều chỉnh"},
+    )
+    assert reclaimed.status_code == 200
+    assert reclaimed.json()["purchased_remaining"] == 50
+    too_many = await client.post(
+        f"/api/v1/admin/users/{user_id}/credits",
+        headers=admin_headers,
+        json={"organization_id": organization_id, "amount": -51, "reason": "Điều chỉnh"},
+    )
+    assert too_many.status_code == 409
+    slots = await client.post(
+        f"/api/v1/admin/users/{user_id}/slots",
+        headers=admin_headers,
+        json={"organization_id": organization_id, "amount": 2, "reason": "Mở thêm chatbot"},
+    )
+    assert slots.status_code == 200, slots.text
+    assert slots.json()["chatbot_slots"] == 3
+    too_many_slots = await client.post(
+        f"/api/v1/admin/users/{user_id}/slots",
+        headers=admin_headers,
+        json={"organization_id": organization_id, "amount": -3, "reason": "Thu hồi"},
+    )
+    assert too_many_slots.status_code == 409
+    wrong_org = await client.post(
+        f"/api/v1/admin/users/{user_id}/credits",
+        headers=admin_headers,
+        json={
+            "organization_id": (await client.get("/api/v1/auth/me", headers=admin_headers))
+            .json()["organizations"][0]["id"],
+            "amount": 10,
+            "reason": "Sai doanh nghiệp",
+        },
+    )
+    assert wrong_org.status_code == 404
+
+    bot_grant = await client.post(
+        f"/api/v1/admin/chatbots/{bot_id}/credits",
+        headers=admin_headers,
+        json={"amount": 30, "reason": "Hỗ trợ chatbot"},
+    )
+    assert bot_grant.status_code == 200, bot_grant.text
+    assert bot_grant.json()["credit_balance"] == 30
+    assert bot_grant.json()["owner_emails"] == ["credits-customer@example.com"]
+    searched_bots = await client.get(
+        "/api/v1/admin/chatbots?search=Bot%20kh%C3%A1ch", headers=admin_headers
+    )
+    assert [item["id"] for item in searched_bots.json()] == [bot_id]
+    denied_bot_grant = await client.post(
+        f"/api/v1/admin/chatbots/{bot_id}/credits",
+        headers=customer_headers,
+        json={"amount": 30, "reason": "Không có quyền"},
+    )
+    assert denied_bot_grant.status_code == 403
+    bot_reclaim = await client.post(
+        f"/api/v1/admin/chatbots/{bot_id}/credits",
+        headers=admin_headers,
+        json={"amount": -10, "reason": "Điều chỉnh"},
+    )
+    assert bot_reclaim.json()["credit_balance"] == 20
+    updated = await client.patch(
+        f"/api/v1/admin/chatbots/{bot_id}",
+        headers=admin_headers,
+        json={"name": "Bot đã cập nhật", "greeting": "Xin chào khách hàng"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["name"] == "Bot đã cập nhật"
+    assert updated.json()["greeting"] == "Xin chào khách hàng"
+    customer_bot = await client.get(f"/api/v1/chatbots/{bot_id}", headers=customer_headers)
+    assert customer_bot.json()["credit_balance"] == 20
+
+    renamed = await client.patch(
+        f"/api/v1/admin/users/{user_id}",
+        headers=admin_headers,
+        json={"full_name": "Khách hàng mới", "email": "credits-renamed@example.com"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["full_name"] == "Khách hàng mới"
+    assert renamed.json()["email"] == "credits-renamed@example.com"
+    reset = await client.post(
+        f"/api/v1/admin/users/{user_id}/reset-password", headers=admin_headers
+    )
+    assert reset.status_code == 200, reset.text
+    temporary_password = reset.json()["temporary_password"]
+    assert len(temporary_password) >= 12
+    assert (await client.get("/api/v1/auth/me", headers=customer_headers)).status_code == 401
+    old_password = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "credits-renamed@example.com", "password": "StrongPassword123"},
+    )
+    assert old_password.status_code == 401
+    new_password = await client.post(
+        "/api/v1/auth/login",
+        json={"email": "credits-renamed@example.com", "password": temporary_password},
+    )
+    assert new_password.status_code == 200, new_password.text
+    customer_headers["Authorization"] = f"Bearer {new_password.json()['access_token']}"
+    promoted = await client.patch(
+        f"/api/v1/admin/users/{user_id}",
+        headers=admin_headers,
+        json={"is_super_admin": True},
+    )
+    assert promoted.status_code == 200, promoted.text
+    assert promoted.json()["is_super_admin"] is True
+    assert (
+        await client.get("/api/v1/admin/summary", headers=customer_headers)
+    ).status_code == 200
+    demoted = await client.patch(
+        f"/api/v1/admin/users/{user_id}",
+        headers=admin_headers,
+        json={"is_super_admin": False},
+    )
+    assert demoted.status_code == 200
+    assert (
+        await client.get("/api/v1/admin/summary", headers=customer_headers)
+    ).status_code == 403
+    admin_id = (await client.get("/api/v1/auth/me", headers=admin_headers)).json()["id"]
+    self_demote = await client.patch(
+        f"/api/v1/admin/users/{admin_id}",
+        headers=admin_headers,
+        json={"is_super_admin": False},
+    )
+    assert self_demote.status_code == 409
+    blocked = await client.patch(
+        f"/api/v1/admin/users/{user_id}",
+        headers=admin_headers,
+        json={"is_active": False},
+    )
+    assert blocked.status_code == 200
+    old_session = await client.get("/api/v1/auth/me", headers=customer_headers)
+    assert old_session.status_code == 401
+    audit = await db.audit_logs.count_documents(
+        {"actor_user_id": (await client.get("/api/v1/auth/me", headers=admin_headers))
+         .json()["id"]}
+    )
+    assert audit >= 5
+    audit_response = await client.get("/api/v1/admin/audit-logs", headers=admin_headers)
+    assert audit_response.status_code == 200
+    assert any(event["action"] == "ADMIN_USER_CREDITS_ADJUSTED" for event in audit_response.json())

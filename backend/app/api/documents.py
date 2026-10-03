@@ -11,7 +11,6 @@ from app.core.config import get_settings
 from app.core.mongodb import MongoRecord, get_mongo_db, new_document, record
 from app.models.entities import DocumentStatus
 from app.schemas.document import DocumentPreview, DocumentResponse
-from app.services.document_links import link_document_to_chatbots
 from app.services.documents import (
     UnsafeDocumentError,
     safe_remove,
@@ -79,11 +78,6 @@ async def upload_document(
         ai_review=None,
     )
     await db.documents.insert_one(document)
-    await link_document_to_chatbots(
-        db,
-        organization_id=str(context.organization.id),
-        document_id=document["_id"],
-    )
     return record(document)
 
 

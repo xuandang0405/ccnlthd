@@ -7,6 +7,9 @@ from httpx import ASGITransport, AsyncClient
 os.environ["APP_ENV"] = "test"
 os.environ["APP_SECRET_KEY"] = "test-secret-key-that-is-long-enough-for-tests"
 os.environ["DATABASE_BACKEND"] = "mongodb"
+os.environ["MONGODB_URI"] = os.environ.get(
+    "TEST_MONGODB_URI", "mongodb://127.0.0.1:27017/?replicaSet=rs0"
+)
 os.environ["MONGODB_DATABASE"] = "ai_sales_assistant_test"
 os.environ["REDIS_URL"] = "redis://localhost:6399/15"
 os.environ["SEPAY_AUTH_MODE"] = "API_KEY"

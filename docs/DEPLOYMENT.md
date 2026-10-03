@@ -1,43 +1,25 @@
-# Triển khai trên máy cá nhân
+# Triển khai Windows hiện tại
 
-## Máy chủ Windows hiện tại
+Luồng một máy: trình duyệt → HTTPS/Cloudflare Tunnel (nếu dùng domain) → FastAPI `127.0.0.1:8000` → MongoDB Atlas. FastAPI phục vụ API và bản build React; document worker và notification worker chạy cùng `run.bat`. Bộ đếm lượt dùng/rate-limit hiện dùng MongoDB. Máy chạy website không cần Docker.
 
-Domain `seminar.bkpvp.top` dùng Cloudflare Tunnel chạy như Windows service và chuyển HTTPS tới `127.0.0.1:8000`. FastAPI phục vụ cả API lẫn frontend production build; dữ liệu nghiệp vụ và quota/rate-limit dùng MongoDB Atlas. Không cần Docker cho cấu hình một máy này.
+## Cài lần đầu
 
-Trang thanh toán tạo VietQR động bằng Quick Link chính thức với BIN MB Bank, số tiền và nội dung riêng của từng đơn. SePay webhook xác nhận giao dịch và frontend tự cập nhật trạng thái mỗi 5 giây.
+Làm theo [INSTALLATION.md](INSTALLATION.md): tạo lại virtual environment trên đúng máy, cài backend, `npm ci` và build frontend, cấu hình `backend/.env`, kiểm tra MongoDB. Đặt `APP_PUBLIC_URL`, `FRONTEND_ORIGIN` và `APP_DOMAIN` đúng domain đang dùng. Trong Cloudflare Tunnel, trỏ hostname tới `http://127.0.0.1:8000`; không chuyển HTTPS trực tiếp vào Uvicorn HTTP. Kiểm tra hostname/DNS/Tunnel thực tế trước khi công bố URL.
 
-Triển khai lại an toàn (tự backup MongoDB và uploads trước khi build):
+`run.bat` chỉ chạy server khi cửa sổ mở và dừng các PID cũ của chính dự án trước khi khởi động. Nó không cài package, không build frontend và không tự bật lại sau khi máy khởi động. Sau khi chạy, kiểm tra `/health/live` và `/health/ready`; nếu `ready` trả 503, đọc log trong cửa sổ để xác định MongoDB hoặc rate-limit backend chưa sẵn sàng.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\deployment\deploy-server.ps1
-```
+## Cập nhật bản triển khai
 
-Các tiến trình server ghi PID/log trong `.runtime/`. `deployment/run-server.ps1` khởi động backend và hai worker; `deployment/stop-server.ps1` chỉ dừng tiến trình đã xác minh đúng executable/command line và đặt maintenance marker để supervisor không tự bật lại. Scheduled task `AI Sales Assistant Server` tự phục hồi tiến trình; `AI Sales Assistant Backup` tạo MongoDB Extended JSON ZIP và ZIP uploads mỗi ngày, giữ 14 ngày. Cloudflare Tunnel phải tiếp tục ở trạng thái `Running / Automatic`.
+1. Sao lưu MongoDB và thư mục `backend/storage/uploads` ra vị trí an toàn; kiểm tra file sao lưu trước khi thay đổi.
+2. Review thay đổi và kiểm tra CI. Dừng server đang mở bằng Ctrl+C.
+3. Trên máy triển khai, chạy `npm ci --prefix frontend`, `npm run build --prefix frontend`; trong `backend`, chạy `.\.venv\Scripts\python.exe -m pip install -e .` và `python ..\deployment\prepare-mongodb.py` bằng Python của venv.
+4. Mở `run.bat`, xác nhận `health/ready`, đăng nhập bằng tài khoản test và thử một luồng widget. Nếu lỗi, giữ bản code/config và backup trước đó để quay lại; không xóa MongoDB production.
 
-Vì tác vụ startup cấp user chỉ chạy sau khi tài khoản Windows đăng nhập, muốn server chạy trước đăng nhập cần mở PowerShell bằng quyền Administrator và đăng ký scheduled task/service tương ứng.
+`deployment/deploy-server.ps1` là đường triển khai có backup tự động, nhưng có thao tác dừng tiến trình và ghi backup trong `.runtime`; chỉ dùng khi đã kiểm tra cấu hình và dung lượng đĩa. Không chạy `pytest` trỏ vào Atlas production vì fixture xóa database test.
 
-Luồng hiện tại: Internet → Cloudflare Tunnel → FastAPI `127.0.0.1:8000` → MongoDB Atlas qua TLS.
+## Việc cần xác minh ngoài mã nguồn
 
-## Điều kiện bên ngoài cần xác nhận
-
-- Có IP public thực hay nằm sau CGNAT. So sánh WAN IP của router với IP do ISP công bố.
-- Domain và bản ghi DNS A/AAAA trỏ đúng IP.
-- Port forwarding TCP 80/443 tới IP LAN cố định của máy chủ.
-- Windows Firewall chỉ mở 80/443; không mở 5432/6379.
-- Nếu CGNAT, dùng tunnel có kiểm soát sau khi đánh giá điều khoản, quyền truy cập và cách bảo vệ origin.
-
-## Lệnh vận hành
-
-```powershell
-docker compose config
-docker compose up -d --build
-docker compose ps
-docker compose logs --tail 200 backend worker caddy
-Invoke-RestMethod https://YOUR_DOMAIN/health/ready
-```
-
-Caddy tự xin/gia hạn TLS khi domain công khai hợp lệ và 80/443 tới được máy. `restart: unless-stopped`, health checks và volume bền đã được cấu hình; vẫn cần kiểm thử restart thật.
-
-## Nâng cấp
-
-Backup trước, pull thay đổi đã review, build, rồi chạy `docker compose up -d --build`. Backend chạy migration Alembic trước khi nhận traffic. Với nhiều replica cần tách migration thành một release job duy nhất.
+- Chứng chỉ HTTPS và truy cập từ mạng bên ngoài; hostname Tunnel phải đúng domain đang công bố.
+- Kết nối MongoDB Atlas, IP Access List, backup và diễn tập restore trên database riêng.
+- Gemini key/model/quota; webhook SePay thật; Telegram/SMTP nếu bật.
+- Log và cảnh báo vận hành, chính sách lưu/xóa dữ liệu, kiểm tra bảo mật trước khi phục vụ người dùng thật.

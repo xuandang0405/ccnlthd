@@ -1,3 +1,4 @@
+import json
 import re
 from dataclasses import asdict, dataclass
 
@@ -56,5 +57,35 @@ def review_catalog(text: str) -> DocumentReview:
         product_signals=product_signals,
         price_signals=price_signals,
         summary=summary,
+        issues=issues,
+    )
+
+
+async def review_catalog_with_ai(text: str) -> DocumentReview:
+    from app.integrations.gemini import GeminiService, GeminiServiceError
+
+    sample = text[:12_000]
+    baseline = review_catalog(sample)
+    try:
+        result = json.loads(await GeminiService().review_document(sample))
+        if not isinstance(result, dict) or not isinstance(result.get("passed"), bool):
+            raise ValueError("Kết quả duyệt thiếu trạng thái")
+        score = result.get("score")
+        summary = result.get("summary")
+        issues = result.get("issues")
+        if (
+            not isinstance(score, int) or isinstance(score, bool) or not 0 <= score <= 100
+            or not isinstance(summary, str) or not summary.strip()
+            or not isinstance(issues, list) or not all(isinstance(item, str) for item in issues)
+        ):
+            raise ValueError("Kết quả duyệt không đúng cấu trúc")
+    except (ValueError, TypeError) as exc:
+        raise GeminiServiceError("Gemini trả kết quả kiểm duyệt không hợp lệ") from exc
+    return DocumentReview(
+        passed=result["passed"] and score >= 70 and not issues,
+        score=score,
+        product_signals=baseline.product_signals,
+        price_signals=baseline.price_signals,
+        summary=summary.strip(),
         issues=issues,
     )

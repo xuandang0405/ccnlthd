@@ -1,56 +1,65 @@
-# Cài đặt
+# Cài đặt trên Windows không dùng Docker
 
-## Cách nhanh nhất trên Windows
+Luồng vận hành hiện tại: `run.bat` giữ FastAPI và hai worker chạy trong cửa sổ lệnh; FastAPI phục vụ luôn bản build React tại `frontend/dist`. MongoDB Atlas lưu dữ liệu nghiệp vụ và bộ đếm lượt dùng. Không cần chạy Vite riêng sau khi build.
 
-Nhấp đúp `run.bat`. Nếu Docker không có hoặc Docker Engine chưa chạy, script tự chuyển sang cấu hình local sau:
+## Yêu cầu
 
-- FastAPI và hai worker chạy bằng virtual environment trong `backend/.venv`.
-- React/Vite chạy tại `http://127.0.0.1:5173`.
-- SQLite lưu dữ liệu tại `backend/sales_assistant.db`.
-- Quota dùng bộ nhớ trong một tiến trình, không cần Redis.
-- Log và PID nằm trong `.runtime/`; secret development được tạo ngẫu nhiên và không commit.
+- Python 3.12 (kiểm tra bằng `py -0p`) và Node.js 22 + npm.
+- Tài khoản MongoDB Atlas có quyền đọc/ghi và IP của máy chủ được cho phép truy cập. MongoDB phải hỗ trợ transaction/replica set.
+- Internet để cài dependency, kết nối Atlas và gọi Gemini khi dùng tính năng AI.
+- Cloudflare Tunnel/DNS/HTTPS chỉ cần khi muốn truy cập từ Internet; chạy local không cần chúng.
 
-Yêu cầu: Python 3.12+ và Node.js 20+ có trong `PATH`. Lần chạy đầu cần Internet để cài dependency. Quota sẽ đặt lại khi backend khởi động lại, vì vậy cách này chỉ dành cho học tập, demo và phát triển.
+## Cài đặt lần đầu
 
-## Docker Compose (production-like)
-
-### Chạy tự động trên Windows
-
-Nhấp đúp `run.bat` ở thư mục gốc. Script kiểm tra Docker, tự tạo `.env` an toàn nếu chưa có, khởi động toàn bộ service và chỉ mở website sau khi readiness check thành công. Script không ghi đè `.env` đã tồn tại và không xóa dữ liệu/volume.
-
-1. Cài Docker Desktop với WSL2 và bật tự khởi động cùng Windows.
-2. Sao chép `.env.example` thành `.env`.
-3. Tạo `APP_SECRET_KEY` ngẫu nhiên tối thiểu 32 ký tự và mật khẩu PostgreSQL riêng.
-4. Điền `APP_DOMAIN`, `APP_PUBLIC_URL=https://<domain>` và `FRONTEND_ORIGIN=https://<domain>`.
-5. Chỉ điền Gemini/SePay khi có credentials thật.
-6. Chạy `docker compose config`, sau đó `docker compose up -d --build`.
-
-PostgreSQL và Redis chỉ nằm trong mạng `internal`, không publish port ra host. Caddy là service duy nhất mở 80/443.
-
-## Development trực tiếp trên Windows (thủ công)
-
-Nếu không dùng `run.bat`, có thể tự chạy Python 3.12+, Node 20+ với SQLite và quota bộ nhớ:
+Mở PowerShell tại thư mục `source`:
 
 ```powershell
-$env:APP_ENV="development"
-$env:APP_SECRET_KEY="development-secret-at-least-32-characters"
-$env:DATABASE_URL="sqlite+aiosqlite:///./sales_assistant.db"
-$env:RATE_LIMIT_BACKEND="memory"
-cd backend
-python -m venv .venv
-.\.venv\Scripts\pip.exe install -e ".[dev]"
-.\.venv\Scripts\alembic.exe upgrade head
-.\.venv\Scripts\uvicorn.exe app.main:app --reload
+py -3.12 -m venv .\backend\.venv
+.\backend\.venv\Scripts\python.exe -m pip install -e .\backend
+npm ci --prefix .\frontend
+npm run build --prefix .\frontend
+Copy-Item .\.env.example .\backend\.env
 ```
 
-Terminal khác:
+Nếu chép dự án từ máy khác và `.venv` vẫn chỉ về đường dẫn Python trên máy cũ, hãy **đổi tên thư mục `.venv` cũ để giữ bản dự phòng**, rồi tạo lại bằng lệnh ở trên. Không sao chép virtual environment giữa hai máy.
+
+Mở `backend/.env` và điền tối thiểu:
+
+```dotenv
+APP_ENV=production
+APP_PUBLIC_URL=http://127.0.0.1:8000
+FRONTEND_ORIGIN=http://127.0.0.1:8000
+APP_DOMAIN=127.0.0.1
+DATABASE_BACKEND=mongodb
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
+MONGODB_DATABASE=ai_sales_assistant
+RATE_LIMIT_BACKEND=mongodb
+UPLOAD_DIR=storage/uploads
+APP_SECRET_KEY=<chuoi-ngau-nhien-toi-thieu-32-ky-tu>
+```
+
+Nếu dùng domain HTTPS thật, thay ba giá trị `APP_PUBLIC_URL`, `FRONTEND_ORIGIN`, `APP_DOMAIN` bằng URL/domain đó; `APP_DOMAIN` chỉ chứa tên host, không chứa `https://`. Điền thêm `GEMINI_API_KEY` và cấu hình SePay/ngân hàng nếu cần thử các tích hợp này. Không đưa `backend/.env` lên Git hoặc gửi cho người khác.
+
+Kiểm tra kết nối Atlas trước khi chạy:
 
 ```powershell
-cd backend
-.\.venv\Scripts\python.exe -m app.workers.documents
-cd ..\frontend
-npm ci
-npm run dev
+Push-Location .\backend
+.\.venv\Scripts\python.exe ..\deployment\prepare-mongodb.py
+Pop-Location
 ```
 
-SQLite và quota bộ nhớ chỉ phục vụ test/dev nhẹ. Deployment thật phải dùng PostgreSQL, Redis và `RATE_LIMIT_BACKEND=redis`.
+Nhấp đúp `run.bat`, giữ cửa sổ mở, rồi vào `http://127.0.0.1:8000/`. Kiểm tra `http://127.0.0.1:8000/health/ready` trả về `status: ready`. Đóng cửa sổ hoặc nhấn Ctrl+C sẽ dừng server. `run.bat` không tự cài dependency hay build frontend. Các link domain in sẵn trong cửa sổ `run.bat` là cấu hình triển khai hiện tại; nếu đã đổi domain, cần đối chiếu lại với `backend/.env` và Cloudflare Tunnel.
+
+## Kiểm thử và chạy lại trên máy khác
+
+```powershell
+Push-Location .\backend
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.\.venv\Scripts\python.exe -m ruff check app tests
+Pop-Location
+npm run lint --prefix .\frontend
+npm test --prefix .\frontend
+npm run build --prefix .\frontend
+```
+
+Backend API/integration tests cần **MongoDB replica set dành riêng cho test**. Mặc định chúng tìm `mongodb://127.0.0.1:27017/?replicaSet=rs0`; có thể chỉ định `TEST_MONGODB_URI` cho môi trường test tách biệt. Fixture sẽ xóa database `ai_sales_assistant_test` trước và sau mỗi test: tuyệt đối không trỏ `TEST_MONGODB_URI` vào cụm/dữ liệu production nếu chưa kiểm tra quyền và tên database. GitHub Actions tự dựng MongoDB tạm cho bộ test này; máy chạy server không cần Docker.

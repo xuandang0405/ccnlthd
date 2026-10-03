@@ -1,6 +1,8 @@
 import re
 import shutil
+import unicodedata
 import zipfile
+from datetime import date, datetime
 from pathlib import Path
 from typing import BinaryIO
 
@@ -82,6 +84,30 @@ def normalize_text(value: str) -> str:
     return value.strip()
 
 
+def normalize_search_text(value: str) -> str:
+    value = unicodedata.normalize("NFKD", value.lower())
+    value = "".join(character for character in value if not unicodedata.combining(character))
+    return " ".join(re.findall(r"[a-z0-9]+", value))
+
+
+def search_tokens(value: str, limit: int = 300) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for token in normalize_search_text(value).split():
+        variants = [token]
+        parts = re.findall(r"[a-z]+|\d+", token)
+        if len(parts) > 1:
+            variants.extend(parts)
+        for variant in variants:
+            if variant in seen or (len(variant) < 2 and not variant.isdigit()):
+                continue
+            seen.add(variant)
+            result.append(variant)
+            if len(result) >= limit:
+                return result
+    return result
+
+
 def parse_pdf(path: Path, max_pages: int) -> str:
     reader = PdfReader(path, strict=True)
     if len(reader.pages) > max_pages:
@@ -100,20 +126,88 @@ def parse_docx(path: Path) -> str:
     return normalize_text("\n".join(lines))
 
 
+def _excel_value(value: object) -> str:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
+def _xlsx_sheet_lines(sheet: object, max_cells: int, cells_seen: int) -> tuple[list[str], int]:
+    rows = sheet.iter_rows(values_only=True)
+    buffered: list[tuple[int, list[object]]] = []
+    for row_number, row in enumerate(rows, start=1):
+        values = list(row)
+        nonempty = sum(value is not None and bool(str(value).strip()) for value in values)
+        cells_seen += nonempty
+        if cells_seen > max_cells:
+            raise UnsafeDocumentError(f"XLSX vượt quá giới hạn xử lý {max_cells} ô có dữ liệu")
+        if nonempty:
+            buffered.append((row_number, values))
+        if len(buffered) >= 20:
+            break
+
+    lines = [f"[Trang tính: {sheet.title}]"]
+    if not buffered:
+        return lines, cells_seen
+
+    header_position = max(
+        range(len(buffered)),
+        key=lambda index: sum(
+            value is not None and bool(str(value).strip()) for value in buffered[index][1]
+        ),
+    )
+    header_row_number, header_values = buffered[header_position]
+    headers = [
+        _excel_value(value) if value is not None and str(value).strip() else f"Cột {index + 1}"
+        for index, value in enumerate(header_values)
+    ]
+
+    for row_number, values in buffered[:header_position]:
+        preamble = [
+            _excel_value(value)
+            for value in values
+            if value is not None and str(value).strip()
+        ]
+        if preamble:
+            lines.append(f"[Dòng {row_number}] " + " | ".join(preamble))
+
+    def append_data_row(row_number: int, values: list[object]) -> None:
+        fields = []
+        for index, value in enumerate(values):
+            if value is None or not str(value).strip():
+                continue
+            header = headers[index] if index < len(headers) else f"Cột {index + 1}"
+            fields.append(f"{header}: {_excel_value(value)}")
+        if fields:
+            lines.append(
+                f"[Trang tính: {sheet.title} | Dòng {row_number}] " + " | ".join(fields)
+            )
+
+    for row_number, values in buffered[header_position + 1 :]:
+        append_data_row(row_number, values)
+
+    next_row_number = buffered[-1][0] + 1
+    for row_number, row in enumerate(rows, start=next_row_number):
+        values = list(row)
+        nonempty = sum(value is not None and bool(str(value).strip()) for value in values)
+        cells_seen += nonempty
+        if cells_seen > max_cells:
+            raise UnsafeDocumentError(f"XLSX vượt quá giới hạn xử lý {max_cells} ô có dữ liệu")
+        if nonempty:
+            append_data_row(row_number, values)
+    return lines, cells_seen
+
+
 def parse_xlsx(path: Path, max_cells: int) -> str:
     workbook = load_workbook(path, read_only=True, data_only=True, keep_links=False)
     lines: list[str] = []
     cells_seen = 0
     try:
         for sheet in workbook.worksheets:
-            lines.append(f"[Trang tính: {sheet.title}]")
-            for row in sheet.iter_rows(values_only=True):
-                cells_seen += len(row)
-                if cells_seen > max_cells:
-                    raise UnsafeDocumentError(f"XLSX vượt quá giới hạn xử lý {max_cells} ô")
-                values = [str(value).strip() for value in row if value is not None]
-                if values:
-                    lines.append(" | ".join(values))
+            sheet_lines, cells_seen = _xlsx_sheet_lines(sheet, max_cells, cells_seen)
+            lines.extend(sheet_lines)
     finally:
         workbook.close()
     return normalize_text("\n".join(lines))
@@ -133,18 +227,26 @@ def parse_document(path: Path, extension: str, max_pages: int, max_cells: int) -
     return text
 
 
-def chunks(text: str, target_size: int = 1400, overlap: int = 180) -> list[str]:
+def chunks(text: str, target_size: int = 2600, overlap: int = 240) -> list[str]:
     paragraphs = [part.strip() for part in text.split("\n") if part.strip()]
     result: list[str] = []
-    current = ""
+    current: list[str] = []
     for paragraph in paragraphs:
-        if current and len(current) + len(paragraph) + 1 > target_size:
-            result.append(current)
-            current = f"{current[-overlap:]}\n{paragraph}"
+        current_size = sum(len(part) + 1 for part in current)
+        if current and current_size + len(paragraph) + 1 > target_size:
+            result.append("\n".join(current))
+            tail: list[str] = []
+            tail_size = 0
+            for part in reversed(current):
+                if tail and tail_size + len(part) + 1 > overlap:
+                    break
+                tail.insert(0, part)
+                tail_size += len(part) + 1
+            current = [*tail, paragraph]
         else:
-            current = f"{current}\n{paragraph}".strip()
+            current.append(paragraph)
     if current:
-        result.append(current)
+        result.append("\n".join(current))
     return result
 
 

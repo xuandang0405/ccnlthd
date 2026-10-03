@@ -56,8 +56,27 @@ async def list_conversations(
         .limit(page_size)
         .to_list(None)
     )
+    chatbot_ids = list({item["chatbot_id"] for item in documents})
+    chatbots = await db.chatbots.find({"_id": {"$in": chatbot_ids}}).to_list(None)
+    chatbot_names = {item["_id"]: item["name"] for item in chatbots}
+    conversation_ids = [item["_id"] for item in documents]
+    message_cursor = await db.messages.aggregate([
+        {"$match": {"conversation_id": {"$in": conversation_ids}, "role": "USER"}},
+        {"$sort": {"created_at": 1}},
+        {"$group": {"_id": "$conversation_id", "content": {"$first": "$content"}}},
+    ])
+    first_messages = await message_cursor.to_list(None)
+    questions = {message["_id"]: message["content"] for message in first_messages}
     return ConversationPage(
-        items=[record(document) for document in documents],
+        items=[
+            {
+                **record(document).as_dict(),
+                "id": document["_id"],
+                "chatbot_name": chatbot_names.get(document["chatbot_id"], "Chatbot đã xóa"),
+                "first_question": questions.get(document["_id"]),
+            }
+            for document in documents
+        ],
         total=total,
         page=page,
         page_size=page_size,
@@ -83,10 +102,16 @@ async def get_conversation(
         .sort("created_at", 1)
         .to_list(None)
     )
+    chatbot = await db.chatbots.find_one({"_id": conversation["chatbot_id"]})
+    first_question = next(
+        (message["content"] for message in messages if message["role"] == "USER"), None
+    )
     return ConversationDetail.model_validate(
         {
             "id": conversation["_id"],
             **{key: value for key, value in conversation.items() if key != "_id"},
+            "chatbot_name": chatbot["name"] if chatbot else "Chatbot đã xóa",
+            "first_question": first_question,
             "messages": [
                 {"id": message["_id"], **{k: v for k, v in message.items() if k != "_id"}}
                 for message in messages

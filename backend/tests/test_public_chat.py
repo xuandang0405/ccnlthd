@@ -2,9 +2,11 @@ from collections.abc import AsyncIterator
 
 from httpx import AsyncClient
 
-from app.api.public_chat import get_gemini_service
+from app.api.public_chat import get_gemini_service, retrieve_context
+from app.core.mongodb import get_mongo_database, new_document
 from app.core.redis import SqliteRateLimitStore, get_redis
 from app.main import app
+from app.services.documents import normalize_search_text, search_tokens
 from tests.test_auth_and_tenants import register
 
 
@@ -34,6 +36,87 @@ async def test_sqlite_rate_limit_store_persists(tmp_path):
     second = SqliteRateLimitStore(path)
     assert await second.eval("", 1, "quota:test", 60) == 2
     assert await second.ping() is True
+
+
+async def test_only_widget_page_can_be_embedded(client: AsyncClient):
+    widget = await client.get("/widget/667b99a1-c812-496f-a39a-22c04974b13f")
+    assert "X-Frame-Options" not in widget.headers
+    assert widget.headers["Content-Security-Policy"] == "frame-ancestors *"
+
+    dashboard = await client.get("/app")
+    assert dashboard.headers["X-Frame-Options"] == "DENY"
+    assert dashboard.headers["Content-Security-Policy"] == "frame-ancestors 'none'"
+
+
+async def test_retrieval_ranks_exact_excel_product_above_generic_matches(client: AsyncClient):
+    tokens, me = await register(client, "ranking@example.com", "Ranking Company")
+    organization_id = me["organizations"][0]["id"]
+    headers = {
+        "Authorization": f"Bearer {tokens['access_token']}",
+        "X-Organization-ID": organization_id,
+    }
+    chatbot_response = await client.post(
+        "/api/v1/chatbots", json={"name": "Ranking Bot"}, headers=headers
+    )
+    chatbot_id = chatbot_response.json()["id"]
+    db = get_mongo_database()
+    document = new_document(
+        organization_id=organization_id,
+        original_name="catalog.xlsx",
+        status="DONE",
+        approval_status="APPROVED",
+    )
+    await db.documents.insert_one(document)
+    await db.chatbot_documents.insert_one(
+        new_document(
+            organization_id=organization_id,
+            chatbot_id=chatbot_id,
+            document_id=document["_id"],
+        )
+    )
+    generic = "Tên sản phẩm: Card đồ họa khác 12GB | Giá (VNĐ): 15000000"
+    exact = "Tên sản phẩm: Intel Arc B580 12GB | Giá (VNĐ): 8990000"
+    contents = [generic.replace("khác", f"khác {index}") for index in range(20)] + [exact]
+    await db.document_chunks.insert_many(
+        [
+            new_document(
+                organization_id=organization_id,
+                document_id=document["_id"],
+                chunk_index=index,
+                content=content,
+                search_text=normalize_search_text(content),
+                search_tokens=search_tokens(content),
+            )
+            for index, content in enumerate(contents)
+        ]
+    )
+
+    context, _, matched = await retrieve_context(
+        db, organization_id, chatbot_id, "Intel Arc B580 12GB giá bao nhiêu?"
+    )
+    assert matched is True
+    assert context.startswith(exact)
+
+    _, _, missing = await retrieve_context(
+        db, organization_id, chatbot_id, "Intel Arc B9999 24GB giá bao nhiêu?"
+    )
+    assert missing is False
+    await db.documents.update_one(
+        {"_id": document["_id"]}, {"$set": {"approval_status": "PENDING"}}
+    )
+    pending_context, _, pending_match = await retrieve_context(
+        db, organization_id, chatbot_id, "Intel Arc B580 12GB giá bao nhiêu?"
+    )
+    assert pending_context == ""
+    assert pending_match is False
+    await db.documents.update_one(
+        {"_id": document["_id"]}, {"$unset": {"approval_status": ""}}
+    )
+    blocked_context, _, blocked = await retrieve_context(
+        db, organization_id, chatbot_id, "Intel Arc B580 12GB giá bao nhiêu?"
+    )
+    assert blocked_context == ""
+    assert blocked is False
 
 
 async def test_widget_uses_opaque_visitor_session(client: AsyncClient):
@@ -87,6 +170,8 @@ async def test_widget_uses_opaque_visitor_session(client: AsyncClient):
         conversations = await client.get("/api/v1/conversations", headers=headers)
         assert conversations.status_code == 200
         assert conversations.json()["total"] == 1
+        assert conversations.json()["items"][0]["chatbot_name"] == "Widget Bot"
+        assert conversations.json()["items"][0]["first_question"] == "Giá sản phẩm A là bao nhiêu?"
         detail = await client.get(
             f"/api/v1/conversations/{session.json()['conversation_id']}", headers=headers
         )

@@ -33,7 +33,8 @@ class Settings(BaseSettings):
 
     gemini_api_key: SecretStr | None = None
     gemini_model: str | None = None
-    gemini_timeout_seconds: float = Field(default=30, ge=5, le=120)
+    gemini_timeout_seconds: float = Field(default=50, ge=10, le=120)
+    gemini_attempt_timeout_seconds: float = Field(default=10, ge=3, le=30)
 
     email_enabled: bool = False
     smtp_host: str | None = None
@@ -54,9 +55,9 @@ class Settings(BaseSettings):
     payment_pro_plan_amount: int | None = Field(default=None, gt=0)
 
     upload_dir: Path = Path("storage/uploads")
-    max_upload_bytes: int = Field(default=10 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
+    max_upload_bytes: int = Field(default=25 * 1024 * 1024, ge=1024, le=50 * 1024 * 1024)
     document_max_pages: int = Field(default=500, ge=1, le=2000)
-    document_max_cells: int = Field(default=200_000, ge=1000, le=2_000_000)
+    document_max_cells: int = Field(default=1_000_000, ge=1000, le=2_000_000)
 
     @field_validator("app_secret_key")
     @classmethod
@@ -69,6 +70,8 @@ class Settings(BaseSettings):
     def validate_production_backends(self):
         if self.app_env == "production" and self.rate_limit_backend == "memory":
             raise ValueError("RATE_LIMIT_BACKEND=memory is not allowed in production")
+        if self.gemini_attempt_timeout_seconds >= self.gemini_timeout_seconds:
+            raise ValueError("GEMINI_ATTEMPT_TIMEOUT_SECONDS must be below GEMINI_TIMEOUT_SECONDS")
         return self
 
     @property

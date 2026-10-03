@@ -20,6 +20,8 @@ class ConversationItem(BaseModel):
 
     id: UUID
     chatbot_id: UUID
+    chatbot_name: str
+    first_question: str | None = None
     status: str
     created_at: datetime
     updated_at: datetime

@@ -1,19 +1,33 @@
-# API
+# API FastAPI
 
-Prefix: `/api/v1`. OpenAPI `/docs` chỉ bật ngoài production.
+Prefix: `/api/v1`. Khi `APP_ENV=development` hoặc `test`, mở `/docs` hoặc `/openapi.json` để xem schema request/response sinh từ Pydantic. `/docs` được tắt ở production; `/openapi.json` vẫn có thể truy cập theo cấu hình FastAPI hiện tại.
 
-- `/auth/register|login|refresh|logout|me`: access token ngắn hạn và refresh session có thu hồi/rotation.
-- `/auth/password-reset/request|confirm`: token một lần 30 phút; chỉ gửi khi SMTP thật được bật.
-- `/chatbots`: CRUD tenant; `PUT /{id}/documents/{document_id}` gán nguồn tri thức.
-- `/documents`: upload/list/preview/retry/delete. Worker xử lý file ở tiến trình riêng.
-- `/public/chat/{public_id}/sessions|messages|leads`: API widget bằng visitor token, không dùng JWT doanh nghiệp.
-- `/conversations`, `/conversations/{id}`: phân trang và chi tiết lịch sử tenant.
-- `/leads`, `PATCH /leads/{id}`: tìm/lọc và cập nhật pipeline.
-- `/dashboard/summary`: số liệu thật theo tenant.
-- `/payments/orders/pro`: owner tạo đơn từ giá backend.
-- `/webhooks/sepay`: webhook công khai nhưng bắt buộc `Authorization: Apikey ...` khi `SEPAY_AUTH_MODE=API_KEY`.
-- `/telegram/status|challenge|confirm`: owner xác minh quyền nhận mã trước khi bật thông báo lead.
-- `/admin/*`: chỉ `is_super_admin`, thay đổi trạng thái có audit log.
-- `/health/live`, `/health/ready`: tiến trình và dependencies.
+## Xác thực và quyền
 
-API doanh nghiệp cần `Authorization: Bearer <access>` và `X-Organization-ID`. Widget cần `X-Visitor-Token`.
+- `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`.
+- Các API doanh nghiệp cần `Authorization: Bearer <access_token>` và `X-Organization-ID: <UUID>`. Thiếu/sai token trả 401; thiếu/sai kiểu header tổ chức trả 422; không thuộc doanh nghiệp trả 403.
+- Dependency graph của `GET /dashboard/summary`: endpoint → `get_tenant_context` → `get_current_user` → `HTTPBearer` và `get_mongo_db`; endpoint cũng lấy `get_mongo_db` trực tiếp. FastAPI kiểm tra kiểu header UUID và Pydantic kiểm tra body trước khi xử lý nghiệp vụ.
+- `/admin/*` chỉ dành cho `is_super_admin`; widget công khai dùng visitor token riêng, không dùng JWT doanh nghiệp.
+
+Ví dụ request login:
+
+```json
+{"email":"user@example.com","password":"mật-khẩu-của-bạn"}
+```
+
+Email sai định dạng hoặc thiếu trường sẽ có HTTP 422 và `detail` chứa vị trí/lý do lỗi. Mỗi response có header `X-Request-ID` để tra log.
+
+## Các nhóm endpoint
+
+| Nhóm | Endpoint chính | Ghi chú |
+| --- | --- | --- |
+| Chatbot | `GET/POST /chatbots`, `PATCH/DELETE /chatbots/{id}`, `PUT /chatbots/{id}/documents/{document_id}` | Theo tenant; chỉ gắn tài liệu được duyệt. |
+| Tài liệu | `GET/POST /documents`, `GET /documents/{id}/preview`, `POST /documents/{id}/retry`, `DELETE /documents/{id}` | Upload trả 202; worker xử lý nền. |
+| Widget | `POST /public/chat/{public_id}/sessions`, `/messages`, `/leads` | `/messages` cần `X-Visitor-Token`; body có trường `message`. |
+| Vận hành | `/conversations`, `/leads`, `/dashboard/summary`, `/tickets` | Lịch sử, lead, số liệu, hỗ trợ. |
+| Thanh toán | `GET /public/plans`, `GET /payments/products`, `GET /payments/balance`, `POST /payments/orders/product/{product_code}`, `GET /payments/orders/{id}` | Giá và số lượt do backend quyết định. |
+| Webhook | `POST /webhooks/sepay` | Xác thực theo `SEPAY_AUTH_MODE`; xử lý trùng giao dịch. |
+| Admin | `/admin/users`, `/admin/chatbots`, `/admin/documents`, `/admin/tickets`, `/admin/audit-logs` | Chỉ super admin, có audit cho thao tác quản trị. |
+| Sức khỏe | `/health/live`, `/health/ready` | `ready` kiểm tra MongoDB và bộ đếm/rate limit. |
+
+Endpoint async I/O ví dụ: upload tài liệu gọi `await to_thread.run_sync(...)` để ghi/kiểm tra file mà không chặn event loop, sau đó `await db.documents.insert_one(...)` chờ MongoDB. Việc trích xuất tài liệu dài không dùng FastAPI `BackgroundTasks`; worker riêng tiếp nhận job sau response 202.

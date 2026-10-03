@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 
 from app.core.mongodb import new_document
@@ -33,6 +34,7 @@ async def link_chatbot_to_documents(
         {
             "organization_id": organization_id,
             "status": DocumentStatus.DONE.value,
+            "approval_status": "APPROVED",
         },
         {"_id": 1},
     ).to_list(None)
@@ -54,7 +56,8 @@ async def link_chatbot_to_documents(
 
 async def backfill_document_links(db: Any) -> int:
     documents = await db.documents.find(
-        {"status": DocumentStatus.DONE.value}, {"_id": 1, "organization_id": 1}
+        {"status": DocumentStatus.DONE.value, "approval_status": "APPROVED"},
+        {"_id": 1, "organization_id": 1},
     ).to_list(None)
     linked = 0
     for document in documents:
@@ -64,3 +67,22 @@ async def backfill_document_links(db: Any) -> int:
             document_id=document["_id"],
         )
     return linked
+
+
+async def revoke_auto_approvals(db: Any) -> int:
+    auto_approved = await db.documents.find(
+        {"approval_status": "APPROVED", "approved_by_user_id": None}, {"_id": 1}
+    ).to_list(None)
+    ids = [item["_id"] for item in auto_approved]
+    if ids:
+        await db.documents.update_many(
+            {"_id": {"$in": ids}},
+            {"$set": {
+                "approval_status": "PENDING",
+                "approval_note": "Đã tắt duyệt AI; chờ Admin duyệt tay",
+                "approved_at": None,
+                "updated_at": datetime.now(UTC),
+            }},
+        )
+        await db.chatbot_documents.delete_many({"document_id": {"$in": ids}})
+    return len(ids)

@@ -14,13 +14,13 @@ from tests.test_auth_and_tenants import register
 async def test_sepay_webhook_is_authenticated_idempotent_and_grants_credits(client):
     public_plans = await client.get("/api/v1/public/plans")
     assert public_plans.status_code == 200
-    assert public_plans.json()[1]["price_vnd"] == 349999
+    assert public_plans.json()[1]["price_vnd"] == 34999
 
     products = await client.get("/api/v1/payments/products")
     assert products.status_code == 200
     assert len(products.json()) == 11
     assert len([item for item in products.json() if item["product_type"] == "CHAT_CREDITS"]) == 10
-    assert next(item for item in products.json() if item["code"] == "BOT1")["price_vnd"] == 200000
+    assert next(item for item in products.json() if item["code"] == "BOT1")["price_vnd"] == 20000
 
     tokens, me = await register(client, "pay@example.com", "Công ty Pay")
     organization_id = me["organizations"][0]["id"]
@@ -31,14 +31,14 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_grants_credits(clie
     created = await client.post("/api/v1/payments/orders/product/C100", headers=headers)
     assert created.status_code == 201, created.text
     order = created.json()
-    assert order["amount"] == 49999
+    assert order["amount"] == 4999
     assert order["quantity"] == 100
     assert order["account_number"] == "123456789"
     qr_url = urlparse(order["qr_code_url"])
     assert qr_url.scheme == "https"
     assert qr_url.netloc == "img.vietqr.io"
     assert qr_url.path == "/image/970422-123456789-compact2.png"
-    assert parse_qs(qr_url.query)["amount"] == ["49999"]
+    assert parse_qs(qr_url.query)["amount"] == ["4999"]
     assert parse_qs(qr_url.query)["addInfo"] == [order["order_code"]]
 
     payload = {
@@ -46,10 +46,10 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_grants_credits(clie
         "gateway": "Test Bank",
         "transactionDate": "2026-09-22 10:00:00",
         "accountNumber": "123456789",
-        "code": order["order_code"],
-        "content": f"Thanh toan {order['order_code']}",
+        "code": None,
+        "content": f"Thanh toan {order['order_code'].replace('-', '')}",
         "transferType": "in",
-        "transferAmount": 49999,
+        "transferAmount": 4999,
         "referenceCode": "REF-1",
     }
     rejected = await client.post("/api/v1/webhooks/sepay", json=payload)

@@ -1,23 +1,29 @@
-# Release checklist
+# Checklist trước khi phát hành cho người dùng thật
 
-- [x] Source backend/frontend, migration, worker và Compose đã có.
-- [x] Auth, tenant isolation, chatbot, tài liệu, widget, history, lead, quota và payment state machine có automated test local.
-- [x] Frontend build/lint và backend test/lint local thành công.
-- [ ] Docker Compose build/up/health trên máy chủ thật.
-- [ ] PostgreSQL migration trên bản PostgreSQL 16 thật.
-- [ ] Redis concurrency/load test.
-- [ ] Gemini key/model thật và test grounded answer/usage/cost.
-- [ ] SePay API key, ngân hàng, giá Pro, webhook URL và giao dịch sandbox/thật được đối soát.
-- [ ] VietQR từ nguồn cấu hình thật.
-- [x] Telegram destination challenge, retry hữu hạn và deduplication trong database đã triển khai.
-- [ ] Telegram Bot Token/destination thật và delivery thực tế.
-- [x] Token reset mật khẩu một lần và thu hồi session có automated test.
-- [ ] SMTP provider và email delivery thật.
-- [ ] Domain/DNS/IP public hoặc giải pháp CGNAT.
-- [ ] HTTPS hợp lệ và kiểm tra từ mạng ngoài.
-- [ ] Backup ngoài máy, restore drill và checksum.
-- [ ] E2E, security scan, load test và review pháp lý/privacy.
-- [ ] Monitoring/alerting, retention và runbook sự cố được chủ hệ thống duyệt.
-- [ ] Secret scan sạch, review diff, commit; chỉ push khi chủ dự án xác nhận.
+## Mã nguồn và kiểm thử
 
-Release production bị chặn cho tới khi toàn bộ mục quan trọng còn trống được xác minh.
+- [x] Backend có request/response schema, auth/tenant check, health check và log request ID.
+- [x] Frontend có lint, build, test API và component quota tối thiểu.
+- [x] Có workflow CI cho backend/frontend và MongoDB test tách biệt.
+- [ ] Xác nhận một PR thực tế có CI xanh, reviewer khác người viết và lịch sử merge rõ ràng.
+- [ ] Chạy đầy đủ backend pytest với MongoDB test replica set; ghi lại số test pass và coverage mới.
+- [ ] Bổ sung browser E2E cho đăng nhập, quyền admin, upload/duyệt tài liệu, widget và thanh toán.
+- [ ] Đánh giá câu trả lời AI trên tập dữ liệu được phép sử dụng, đo độ đúng của giá/nguồn và tỷ lệ trả lời sai.
+
+## Cấu hình và bảo mật
+
+- [x] Có `.env.example`; `.env` được Git bỏ qua.
+- [ ] Đổi các API key/mật khẩu từng chia sẻ ngoài secret store; kiểm tra Git history và máy triển khai không lộ secret.
+- [ ] Kiểm tra lại quyền user/admin, tenant isolation, upload sai định dạng, CORS/domain và webhook sai xác thực trên bản phát hành.
+- [ ] Kiểm tra HTTPS, DNS/Cloudflare Tunnel, `APP_DOMAIN` và public URL trên máy chủ thật.
+- [ ] Hoàn thiện chính sách lưu/xóa dữ liệu, quét file độc hại, cảnh báo và kế hoạch xử lý sự cố.
+
+## Vận hành và tích hợp
+
+- [ ] Backup MongoDB và uploads, thử restore trên môi trường tách biệt.
+- [ ] Xác minh Gemini key/model/quota và lỗi khi API tạm quá tải.
+- [ ] Đối soát một giao dịch SePay thật trước khi bật thanh toán cho khách.
+- [ ] Thử Telegram/SMTP thật nếu những tính năng đó được bật.
+- [ ] Thử restart máy/server, health check và quy trình quay lại phiên bản trước.
+
+Không coi các ô chưa đánh dấu là đã hoàn thành chỉ vì code có sẵn; cần biên bản kiểm tra hoặc kết quả CI/vận hành tương ứng.

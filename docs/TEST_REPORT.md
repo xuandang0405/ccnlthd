@@ -1,25 +1,19 @@
-# Báo cáo kiểm thử
+# Báo cáo kiểm thử gần nhất
 
-Ngày chạy local: 2026-09-22, Windows, Python 3.14.7 cho test (source yêu cầu/ảnh Docker dùng Python 3.12), Node/Vite local.
+Ngày kiểm tra: 2026-10-02, Windows, trong workspace hiện tại. Không dùng dữ liệu production cho test.
 
-## Đã chạy thành công
+## Đã xác minh trong lần này
 
-- Ruff: không lỗi.
-- Pytest: 12 passed; gồm auth/refresh/reset, cross-tenant chatbot, upload độc hại/hợp lệ, Gemini thiếu cấu hình báo lỗi thật, widget session/chat và rate-limit headers, SQLite quota persistence, lead/hội thoại, VietQR URL an toàn, SePay API Key/HMAC/idempotency/subscription, Telegram challenge và super-admin authorization.
-- Coverage: 72%; worker/parser/notification worker có nhánh chưa cover.
-- Frontend ESLint và TypeScript/Vite production build: pass.
-- `npm audit --omit=dev`: 0 vulnerability được báo.
-- Alembic SQLite: upgrade/downgrade/upgrade đã chạy ở giai đoạn phát triển.
-- Visual QA thủ công: trang chủ, đăng ký ở viewport hẹp và dashboard shell.
+- Backend `ruff check app tests`: đạt.
+- `pytest --collect-only -q`: thu thập được 33 test; OpenAPI được sinh và endpoint login khai báo request schema, response 200/422.
+- Frontend `npm test`: 7/7 test API và component quota đạt.
+- Frontend `npm run lint`, TypeScript `tsc -b` và `npm run build`: đạt. Vite có cảnh báo về annotation ở dependency `zod`, không phải lỗi build.
+- File workflow CI đọc được dưới dạng YAML.
 
-## NOT VERIFIED / BLOCKED
+## Chưa xác minh trong lần này
 
-- Gemini call thật: thiếu key/model.
-- PostgreSQL/Redis và Docker Compose: chưa kiểm thử; deployment Windows hiện tại dùng SQLite WAL ở chế độ một server.
-- SePay giao dịch thật, VietQR và đối soát: thiếu tài khoản/cấu hình thật; không thực hiện giao dịch thật.
-- Telegram gửi thật: challenge/destination verification có automated test bằng fake transport, nhưng thiếu Bot Token/destination thật.
-- Playwright E2E đầy đủ, streaming SSE, SMTP delivery thật và concurrency load test.
-- Port forwarding trực tiếp/firewall từ Internet chưa kiểm thử vì production đang dùng Cloudflare Tunnel. HTTPS domain, frontend SPA, health và HSTS qua tunnel đã kiểm thử thành công.
-- Backup/restore và restart trên container thật.
+- Chưa chạy toàn bộ `pytest`: máy hiện tại không có MongoDB replica set test ở `127.0.0.1:27017`. Cấu hình CI đã được bổ sung để dựng MongoDB riêng, nhưng phải xem lần chạy GitHub Actions thực tế trước khi tuyên bố CI xanh.
+- Chưa có browser E2E, kiểm thử tải/concurrency, hoặc tập đánh giá Gemini bằng dữ liệu khách hàng thật. Bộ test retrieval nhỏ chỉ kiểm tra truy xuất từ dữ liệu giả lập.
+- Chưa thực hiện giao dịch SePay, gửi Telegram/SMTP, khôi phục backup và kiểm tra Cloudflare Tunnel thật trong lần này.
 
-Không suy diễn các mục NOT VERIFIED là pass.
+Không coi mục “thu thập test” là “test đã pass”. Kết quả cũ trước khi chuyển sang MongoDB không còn là bằng chứng cho bản hiện tại.

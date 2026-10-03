@@ -156,6 +156,15 @@ async def test_free_chatbot_limit_and_per_bot_credit_allocation(client: AsyncCli
     )
     assert reclaimed.status_code == 200, reclaimed.text
     assert reclaimed.json()["credit_balance"] == 60
+    removed = await client.delete(f"/api/v1/chatbots/{first.json()['id']}", headers=headers)
+    assert removed.status_code == 204, removed.text
+    refunded = await client.get("/api/v1/payments/balance", headers=headers)
+    assert refunded.json()["purchased_remaining"] == 250
+    assert refunded.json()["chatbot_count"] == 0
+    replacement = await client.post(
+        "/api/v1/chatbots", json={"name": "Bot thay thế"}, headers=headers
+    )
+    assert replacement.status_code == 201, replacement.text
 
 
 async def test_password_reset_token_is_one_time_and_revokes_sessions(client: AsyncClient):

@@ -1,0 +1,6 @@
+[
+  {"question": "Intel Arc B580 12GB giá bao nhiêu?", "expected_product": "Intel Arc B580 12GB"},
+  {"question": "Gigabyte RTX 4060 8GB còn hàng không?", "expected_product": "Gigabyte RTX 4060 8GB"},
+  {"question": "Bàn phím Logitech K250 giá bao nhiêu?", "expected_product": "Logitech K250"},
+  {"question": "Intel Arc B9999 24GB giá bao nhiêu?", "expected_product": null}
+]

@@ -19,6 +19,24 @@ jobs:
           cache-dependency-path: backend/pyproject.toml
       - run: python -m pip install -e ".[dev]"
         working-directory: backend
+      - name: Start isolated MongoDB replica set for tests
+        run: |
+          docker run -d --name ci-mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for attempt in {1..30}; do
+            if docker exec ci-mongo mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' 2>/dev/null | grep -q '^1$'; then
+              break
+            fi
+            sleep 1
+          done
+          docker exec ci-mongo mongosh --quiet --eval 'rs.initiate({_id: "rs0", members: [{_id: 0, host: "127.0.0.1:27017"}]})'
+          for attempt in {1..30}; do
+            if docker exec ci-mongo mongosh --quiet --eval 'db.hello().isWritablePrimary' 2>/dev/null | grep -q '^true$'; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs ci-mongo
+          exit 1
       - run: ruff check app tests
         working-directory: backend
       - run: pytest --cov=app
@@ -36,6 +54,8 @@ jobs:
       - run: npm ci
         working-directory: frontend
       - run: npm run lint
+        working-directory: frontend
+      - run: npm test
         working-directory: frontend
       - run: npm run build
         working-directory: frontend

@@ -30,7 +30,13 @@ from app.services.commerce import PRODUCTS, PRODUCTS_BY_CODE
 from app.services.credits import ensure_credit_account, ensure_organization_limits
 
 router = APIRouter(tags=["Payments"])
-ORDER_PATTERN = re.compile(r"\b(?:BOT1|C\d+)-[A-Z0-9]{12}\b", re.IGNORECASE)
+PRODUCT_CODE_PATTERN = "|".join(
+    re.escape(code) for code in sorted(PRODUCTS_BY_CODE, key=len, reverse=True)
+)
+ORDER_PATTERN = re.compile(
+    rf"\b(?P<product>{PRODUCT_CODE_PATTERN})[-\s_.]?(?P<token>[A-Z0-9]{{12}})\b",
+    re.IGNORECASE,
+)
 
 
 @router.get("/public/plans", response_model=list[PublicPlanResponse])
@@ -224,7 +230,7 @@ def extract_order_code(payload: SePayWebhookPayload) -> str | None:
     for candidate in (payload.code, payload.content, payload.description):
         match = ORDER_PATTERN.search(candidate or "")
         if match:
-            return match.group(0).upper()
+            return f"{match.group('product').upper()}-{match.group('token').upper()}"
     return None
 
 

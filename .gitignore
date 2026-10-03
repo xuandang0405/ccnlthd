@@ -25,5 +25,6 @@ test-results/
 *.pem
 *.key
 *.p12
+*.rar
 .DS_Store
 Thumbs.db

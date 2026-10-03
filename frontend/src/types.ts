@@ -48,12 +48,19 @@ export type Chatbot = {
 export type DocumentItem = {
   id: string; original_name: string; mime_type: string; size_bytes: number;
   status: "UPLOADED" | "PROCESSING" | "DONE" | "FAILED";
-  processing_error: string | null; created_at: string;
+  processing_error: string | null; approval_status: "PENDING" | "APPROVED" | "REJECTED";
+  approval_note: string | null; ai_review: { passed: boolean; score: number; summary: string; issues: string[] } | null;
+  created_at: string;
 };
 
 export type Conversation = {
-  id: string; chatbot_id: string; status: string; created_at: string; updated_at: string;
+  id: string; chatbot_id: string; chatbot_name: string; first_question: string | null;
+  status: string; created_at: string; updated_at: string;
 };
+
+export type ConversationDetail = Conversation & { messages: Array<{
+  id: string; role: "USER" | "ASSISTANT"; content: string; created_at: string;
+}> };
 
 export type Lead = {
   id: string; chatbot_id: string; conversation_id: string; customer_name: string | null;
@@ -97,10 +104,15 @@ export type AdminOrganization = {
 
 export type AdminUser = {
   id: string; email: string; full_name: string; is_active: boolean; is_super_admin: boolean;
-  organizations: string[]; created_at: string;
+  organizations: string[]; organization_accounts: Array<{
+    id: string; name: string; free_remaining: number; purchased_remaining: number;
+    chatbot_slots: number; chatbot_count: number;
+  }>; created_at: string;
 };
 
-export type AdminChatbot = Chatbot & { organization_id: string; organization_name: string };
+export type AdminChatbot = Chatbot & {
+  organization_id: string; organization_name: string; owner_emails: string[];
+};
 
 export type AdminDocument = {
   id: string; organization_id: string; organization_name: string; original_name: string;
@@ -112,6 +124,11 @@ export type AdminDocument = {
 export type AdminPayment = {
   id: string; organization_id: string; organization_name: string; order_code: string;
   product_name: string; amount: number; status: string; created_at: string;
+};
+
+export type AdminAuditEvent = {
+  id: string; actor_email: string; action: string; resource_type: string;
+  resource_id: string; metadata_redacted: string | null; created_at: string;
 };
 
 export type TicketMessage = {

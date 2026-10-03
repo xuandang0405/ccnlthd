@@ -21,6 +21,8 @@ from app.schemas.public_chat import (
     VisitorSessionResponse,
 )
 from app.services.credits import CreditUnavailableError, consume_credit, refund_credit
+from app.services.documents import normalize_search_text, search_tokens
+from app.services.fallback_chat import build_fallback_reply
 from app.services.quota import QuotaService, QuotaUnavailableError
 
 router = APIRouter(prefix="/public/chat", tags=["Public Widget"])
@@ -170,17 +172,11 @@ async def create_public_lead(
 
 async def retrieve_context(db: Any, organization_id: str, chatbot_id: str, question: str):
     ignored_terms = {
-        "bao", "bạn", "cho", "chưa", "còn", "của", "đang", "được", "giá", "hiện",
-        "không", "mình", "nào", "nhiêu", "phẩm", "sản", "tại", "trang", "trên", "tôi",
-        "với", "website",
+        "bao", "ban", "cho", "chua", "con", "cua", "dang", "duoc", "gia", "hien",
+        "khong", "minh", "nao", "nhieu", "pham", "san", "tai", "trang", "tren", "toi",
+        "voi", "website",
     }
-    terms = sorted(
-        {
-            word.lower()
-            for word in re.findall(r"\w+", question, flags=re.UNICODE)
-            if len(word) >= 3 and word.lower() not in ignored_terms
-        }
-    )[:8]
+    terms = [term for term in search_tokens(question, limit=20) if term not in ignored_terms][:12]
     relations = await db.chatbot_documents.find(
         {"organization_id": organization_id, "chatbot_id": chatbot_id}, {"document_id": 1}
     ).to_list(None)
@@ -190,38 +186,63 @@ async def retrieve_context(db: Any, organization_id: str, chatbot_id: str, quest
             "_id": {"$in": document_ids},
             "organization_id": organization_id,
             "status": DocumentStatus.DONE.value,
-            "$or": [
-                {"approval_status": "APPROVED"},
-                {"approval_status": {"$exists": False}},
-            ],
+            "approval_status": "APPROVED",
         }
     ).to_list(None)
     document_map = {item["_id"]: item for item in documents}
     if not document_map:
         return "", [], False
-    rows = []
+    rows: list[dict[str, Any]] = []
+    base_filter = {
+        "organization_id": organization_id,
+        "document_id": {"$in": list(document_map)},
+    }
     if terms:
-        pattern = "|".join(re.escape(term) for term in terms)
         rows = (
             await db.document_chunks.find(
-                {
-                    "organization_id": organization_id,
-                    "document_id": {"$in": list(document_map)},
-                    "content": {"$regex": pattern, "$options": "i"},
-                }
+                {**base_filter, "search_tokens": {"$in": terms}}
             )
-            .limit(8)
+            .limit(400)
             .to_list(None)
         )
-    match_found = bool(rows)
+        if not rows:
+            pattern = "|".join(re.escape(term) for term in terms)
+            rows = (
+                await db.document_chunks.find(
+                    {**base_filter, "content": {"$regex": pattern, "$options": "i"}}
+                )
+                .limit(300)
+                .to_list(None)
+            )
+
+    ranked: list[tuple[float, bool, dict[str, Any]]] = []
+    for item in rows:
+        content_tokens = set(search_tokens(item["content"], limit=2000))
+        matched = [term for term in terms if term in content_tokens]
+        if not matched:
+            continue
+        total_weight = sum(5 if any(char.isdigit() for char in term) else 2 for term in terms)
+        matched_weight = sum(
+            5 if any(char.isdigit() for char in term) else 2 for term in matched
+        )
+        coverage = matched_weight / total_weight if total_weight else 0
+        normalized_content = item.get("search_text") or normalize_search_text(item["content"])
+        adjacent_matches = sum(
+            1
+            for left, right in zip(terms, terms[1:], strict=False)
+            if f"{left} {right}" in normalized_content
+        )
+        required = [term for term in terms if any(char.isdigit() for char in term)]
+        confident = coverage >= 0.6 and all(term in content_tokens for term in required)
+        score = coverage * 100 + adjacent_matches * 12 + (35 if len(matched) == len(terms) else 0)
+        ranked.append((score, confident, item))
+    ranked.sort(key=lambda entry: (-entry[0], entry[2].get("chunk_index", 0)))
+
+    match_found = bool(ranked and ranked[0][1])
+    rows = [entry[2] for entry in ranked[:6]]
     if not rows:
         rows = (
-            await db.document_chunks.find(
-                {
-                    "organization_id": organization_id,
-                    "document_id": {"$in": list(document_map)},
-                }
-            )
+            await db.document_chunks.find(base_filter)
             .limit(4)
             .to_list(None)
         )
@@ -271,9 +292,13 @@ async def send_message(
             tone=chatbot.tone,
             match_found=match_found,
         )
-    except GeminiServiceError as exc:
-        await refund_credit(db, chatbot.organization_id, chatbot.id, credit.source)
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except GeminiServiceError:
+        refunded_remaining = await refund_credit(
+            db, chatbot.organization_id, chatbot.id, credit.source
+        )
+        response.headers["X-Credit-Remaining"] = str(refunded_remaining)
+        reply = build_fallback_reply(payload.message, context, match_found)
+        credit = type(credit)(source=credit.source, remaining=refunded_remaining)
     now = datetime.now(UTC)
     await db.messages.insert_many(
         [
