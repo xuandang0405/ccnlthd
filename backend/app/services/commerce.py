@@ -17,7 +17,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Mở thêm một vị trí chatbot vĩnh viễn cho doanh nghiệp.",
         "product_type": "CHATBOT_SLOT",
         "quantity": 1,
-        "price_vnd": 200_000,
+        "price_vnd": 20_000,
     },
     {
         "code": "C100",
@@ -25,7 +25,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói khởi động",
         "product_type": "CHAT_CREDITS",
         "quantity": 100,
-        "price_vnd": 49_999,
+        "price_vnd": 4_999,
     },
     {
         "code": "C500",
@@ -33,7 +33,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói nhỏ",
         "product_type": "CHAT_CREDITS",
         "quantity": 500,
-        "price_vnd": 199_999,
+        "price_vnd": 19_999,
     },
     {
         "code": "C1000",
@@ -41,7 +41,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói phổ biến",
         "product_type": "CHAT_CREDITS",
         "quantity": 1_000,
-        "price_vnd": 349_999,
+        "price_vnd": 34_999,
     },
     {
         "code": "C2500",
@@ -49,7 +49,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói tăng trưởng",
         "product_type": "CHAT_CREDITS",
         "quantity": 2_500,
-        "price_vnd": 799_999,
+        "price_vnd": 79_999,
     },
     {
         "code": "C5000",
@@ -57,7 +57,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói kinh doanh",
         "product_type": "CHAT_CREDITS",
         "quantity": 5_000,
-        "price_vnd": 1_499_999,
+        "price_vnd": 149_999,
     },
     {
         "code": "C10000",
@@ -65,7 +65,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói chuyên nghiệp",
         "product_type": "CHAT_CREDITS",
         "quantity": 10_000,
-        "price_vnd": 2_799_999,
+        "price_vnd": 279_999,
     },
     {
         "code": "C25000",
@@ -73,7 +73,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói quy mô lớn",
         "product_type": "CHAT_CREDITS",
         "quantity": 25_000,
-        "price_vnd": 6_499_999,
+        "price_vnd": 649_999,
     },
     {
         "code": "C50000",
@@ -81,7 +81,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói doanh nghiệp",
         "product_type": "CHAT_CREDITS",
         "quantity": 50_000,
-        "price_vnd": 11_999_999,
+        "price_vnd": 1_199_999,
     },
     {
         "code": "C100000",
@@ -89,7 +89,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói doanh nghiệp Plus",
         "product_type": "CHAT_CREDITS",
         "quantity": 100_000,
-        "price_vnd": 21_999_999,
+        "price_vnd": 2_199_999,
     },
     {
         "code": "C250000",
@@ -97,7 +97,7 @@ PRODUCTS: tuple[Product, ...] = (
         "description": "Gói đối tác",
         "product_type": "CHAT_CREDITS",
         "quantity": 250_000,
-        "price_vnd": 49_999_999,
+        "price_vnd": 4_999_999,
     },
 )
 
