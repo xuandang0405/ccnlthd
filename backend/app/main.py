@@ -2,7 +2,6 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,26 +22,30 @@ from app.api import (
     tickets,
 )
 from app.core.config import get_settings
-from app.core.mongodb import close_mongo_client, ensure_mongo_indexes, get_mongo_database
+from app.core.database import check_schema_ready, engine
+from app.core.errors import ERROR_RESPONSES, internal_error_handler, register_error_handlers
+from app.core.observability import configure_request_logging, safe_request_id
 from app.core.redis import (
     InMemoryRedis,
-    MongoRateLimitStore,
     SqliteRateLimitStore,
+    SQLRateLimitStore,
     create_redis_client,
 )
+from app.schemas.health import ReadinessResponse
 
 settings = get_settings()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+access_logger = configure_request_logging()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
-    await ensure_mongo_indexes()
     try:
+        await check_schema_ready()
         yield
     finally:
-        await close_mongo_client()
+        await engine.dispose()
 
 
 app = FastAPI(
@@ -51,13 +54,15 @@ app = FastAPI(
     docs_url="/docs" if settings.app_env != "production" else None,
     redoc_url="/redoc" if settings.app_env != "production" else None,
     lifespan=lifespan,
+    responses=ERROR_RESPONSES,
 )
+register_error_handlers(app)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_hosts)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=[
         "Authorization",
         "Content-Type",
@@ -68,6 +73,7 @@ app.add_middleware(
     ],
     expose_headers=[
         "X-Request-ID",
+        "X-Credit-Remaining",
         "X-RateLimit-Limit",
         "X-RateLimit-Remaining",
         "X-RateLimit-Reset",
@@ -78,28 +84,32 @@ app.add_middleware(
 
 @app.middleware("http")
 async def request_context(request: Request, call_next):
-    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    request_id = safe_request_id(request.headers.get("X-Request-ID"))
+    request.state.request_id = request_id
     started = time.perf_counter()
     try:
         response = await call_next(request)
-    except Exception:
-        logging.getLogger("app").exception("Unhandled request error request_id=%s", request_id)
-        response = JSONResponse(
-            status_code=500, content={"detail": "Lỗi hệ thống", "request_id": request_id}
-        )
+    except Exception as exc:
+        response = await internal_error_handler(request, exc)
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
+    if request.url.path.startswith("/widget/"):
+        response.headers["Content-Security-Policy"] = "frame-ancestors *"
+    else:
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     if settings.app_env == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    logging.getLogger("app.access").info(
-        "request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
-        request_id,
-        request.method,
-        request.url.path,
-        response.status_code,
-        (time.perf_counter() - started) * 1000,
+    access_logger.info(
+        "HTTP request",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status": response.status_code,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
     )
     return response
 
@@ -109,11 +119,16 @@ async def liveness():
     return {"status": "ok"}
 
 
-@app.get("/health/ready", tags=["Monitoring"])
+@app.get(
+    "/health/ready",
+    tags=["Monitoring"],
+    response_model=ReadinessResponse,
+    responses={503: {"model": ReadinessResponse}},
+)
 async def readiness():
     components = {"database": "down", "redis": "down"}
     try:
-        await get_mongo_database().command("ping")
+        await check_schema_ready()
         components["database"] = "up"
     except Exception as exc:
         logging.getLogger("app.health").warning("Database readiness failed: %s", type(exc).__name__)
@@ -122,8 +137,8 @@ async def readiness():
         if await redis.ping():
             if isinstance(redis, InMemoryRedis):
                 components["redis"] = "memory (development only)"
-            elif isinstance(redis, MongoRateLimitStore):
-                components["redis"] = "mongodb"
+            elif isinstance(redis, SQLRateLimitStore):
+                components["redis"] = "sql"
             elif isinstance(redis, SqliteRateLimitStore):
                 components["redis"] = "sqlite (single-server mode)"
             else:
@@ -131,7 +146,7 @@ async def readiness():
     except Exception as exc:
         logging.getLogger("app.health").warning("Redis readiness failed: %s", type(exc).__name__)
     finally:
-        if not isinstance(redis, (InMemoryRedis, SqliteRateLimitStore, MongoRateLimitStore)):
+        if not isinstance(redis, (InMemoryRedis, SqliteRateLimitStore, SQLRateLimitStore)):
             await redis.aclose()
     healthy = components["database"] == "up" and components["redis"] != "down"
     return JSONResponse(
@@ -152,7 +167,12 @@ app.include_router(telegram.router, prefix="/api/v1")
 app.include_router(tickets.router, prefix="/api/v1")
 
 
-@app.get("/api/v1/health", tags=["Monitoring"])
+@app.get(
+    "/api/v1/health",
+    tags=["Monitoring"],
+    response_model=ReadinessResponse,
+    responses={503: {"model": ReadinessResponse}},
+)
 async def report_compatible_health():
     return await readiness()
 
@@ -164,7 +184,7 @@ if frontend_assets.is_dir():
 
 
 @app.get("/", include_in_schema=False)
-async def frontend_index():
+def frontend_index():
     index = frontend_dist / "index.html"
     if not index.is_file():
         raise HTTPException(status_code=503, detail="Frontend chưa được build")
@@ -172,7 +192,7 @@ async def frontend_index():
 
 
 @app.get("/{frontend_path:path}", include_in_schema=False)
-async def frontend_spa(frontend_path: str):
+def frontend_spa(frontend_path: str):
     if frontend_path.startswith(("api/", "health/", "docs", "redoc", "openapi.json")):
         raise HTTPException(status_code=404, detail="Không tìm thấy endpoint")
     candidate = (frontend_dist / frontend_path).resolve()
