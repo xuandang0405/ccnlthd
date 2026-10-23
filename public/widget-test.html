@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/img/logo-2.png" />
+    <title>Thử widget Trợ lý Việt</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #F8FAFC;
+        color: #0F172A;
+        font-family: "Inter", system-ui, sans-serif;
+      }
+      *, *::before, *::after {
+        border-radius: 0 !important;
+      }
+      main {
+        max-width: 680px;
+        margin: 24px;
+        padding: 36px;
+        border: 1px solid #0F172A;
+        background: white;
+        box-shadow: 4px 4px 0 #09090B;
+      }
+      h1 { margin-top: 0; font-weight: 800; letter-spacing: -0.02em; }
+      code {
+        display: block;
+        padding: 16px;
+        overflow-wrap: anywhere;
+        background: #09090B;
+        color: #E2E8F0;
+        font-family: "JetBrains Mono", monospace;
+        border: 1px solid #0F172A;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Trang thử widget Trợ lý Việt</h1>
+      <p id="test-instructions">Mở trang này với ?chatbotId=ID_CÔNG_KHAI để thử chatbot đã tạo trên hệ thống đang chạy.</p>
+      <code id="embed-code">Lấy ID công khai trong phần mã nhúng của chatbot, không dùng ID tài khoản hay ID doanh nghiệp.</code>
+    </main>
+    <script>
+      const chatbotId = new URLSearchParams(location.search).get("chatbotId");
+      if (chatbotId && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(chatbotId)) {
+        const widgetUrl = new URL("/widget.js", location.origin).href;
+        document.getElementById("test-instructions").textContent = "Nhấn nút chatbot ở góc dưới bên phải để mở Trợ lý Việt.";
+        document.getElementById("embed-code").textContent = `<script src="${widgetUrl}" data-chatbot-id="${chatbotId}" async><\/script>`;
+        const widgetScript = document.createElement("script");
+        widgetScript.src = widgetUrl;
+        widgetScript.dataset.chatbotId = chatbotId;
+        widgetScript.async = true;
+        document.body.appendChild(widgetScript);
+      }
+    </script>
+  </body>
+</html>
