@@ -1,43 +1,33 @@
-# Triển khai trên máy cá nhân
+# Triển khai
 
-## Máy chủ Windows hiện tại
+Đã có cấu hình Docker chạy MySQL, migration, API, hai worker và frontend: xem [DOCKER.md](DOCKER.md). Với Docker, Cloudflare Tunnel trên host trỏ tới cổng 8080; các bước bên dưới mô tả cách chạy không Docker ở cổng 8000.
 
-Domain `seminar.bkpvp.top` dùng Cloudflare Tunnel chạy như Windows service và chuyển HTTPS tới `127.0.0.1:8000`. FastAPI phục vụ cả API lẫn frontend production build; dữ liệu nghiệp vụ và quota/rate-limit dùng MongoDB Atlas. Không cần Docker cho cấu hình một máy này.
+Luồng một máy: trình duyệt → HTTPS/Cloudflare Tunnel (nếu dùng domain) → FastAPI 127.0.0.1:8000 → SQLAlchemy + MySQL. FastAPI phục vụ API và frontend đã build; document worker và notification worker chạy cùng run.bat. Máy chạy website không cần Docker.
 
-Trang thanh toán tạo VietQR động bằng Quick Link chính thức với BIN MB Bank, số tiền và nội dung riêng của từng đơn. SePay webhook xác nhận giao dịch và frontend tự cập nhật trạng thái mỗi 5 giây.
+## Chuẩn bị
 
-Triển khai lại an toàn (tự backup MongoDB và uploads trước khi build):
+Làm theo [INSTALLATION.md](INSTALLATION.md) và [hướng dẫn MySQL](../database/HUONG_DAN_MYSQL.md). Cấu hình backend/.env theo domain thật; APP_PUBLIC_URL, FRONTEND_ORIGIN, APP_DOMAIN cần thống nhất. Cloudflare Tunnel trỏ tới http://127.0.0.1:8000, không đưa HTTPS trực tiếp vào Uvicorn HTTP.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\deployment\deploy-server.ps1
-```
+Trên server không dùng root không mật khẩu. Tạo tài khoản MySQL riêng, giữ cổng DB trong mạng riêng/localhost. Nếu tự dùng Docker, DATABASE_URL phải là hostname DB mà container truy cập được, không phải 127.0.0.1 của máy Windows; cấu hình này chưa được kiểm thử trong lần chuyển đổi local.
 
-Các tiến trình server ghi PID/log trong `.runtime/`. `deployment/run-server.ps1` khởi động backend và hai worker; `deployment/stop-server.ps1` chỉ dừng tiến trình đã xác minh đúng executable/command line và đặt maintenance marker để supervisor không tự bật lại. Scheduled task `AI Sales Assistant Server` tự phục hồi tiến trình; `AI Sales Assistant Backup` tạo MongoDB Extended JSON ZIP và ZIP uploads mỗi ngày, giữ 14 ngày. Cloudflare Tunnel phải tiếp tục ở trạng thái `Running / Automatic`.
+## Cập nhật
 
-Vì tác vụ startup cấp user chỉ chạy sau khi tài khoản Windows đăng nhập, muốn server chạy trước đăng nhập cần mở PowerShell bằng quyền Administrator và đăng ký scheduled task/service tương ứng.
+1. Sao lưu database và backend/storage/uploads; đối chiếu và cất một bản ngoài máy chủ.
+2. Dừng run.bat, cập nhật source, giữ .env riêng trên máy triển khai.
+3. Cài backend qua venv, npm ci và npm run build. Nếu có migration mới, đọc migration và chạy alembic upgrade head sau khi sao lưu.
+4. Chạy deployment/prepare-mysql.py bằng venv trong backend để kiểm tra schema.
+5. Mở run.bat, kiểm tra health/ready, đăng nhập và thử widget bằng tài khoản test.
 
-Luồng hiện tại: Internet → Cloudflare Tunnel → FastAPI `127.0.0.1:8000` → MongoDB Atlas qua TLS.
+deployment/deploy-server.ps1 vẫn sao lưu và build, nhưng chỉ kiểm tra schema, không tự nhập SQL hoặc xóa dữ liệu. run.bat chỉ khởi động khi cửa sổ mở và không tự cài package/build/migrate. Các URL hiển thị lấy từ APP_PUBLIC_URL.
 
-## Điều kiện bên ngoài cần xác nhận
+## Kiểm tra trước công bố
 
-- Có IP public thực hay nằm sau CGNAT. So sánh WAN IP của router với IP do ISP công bố.
-- Domain và bản ghi DNS A/AAAA trỏ đúng IP.
-- Port forwarding TCP 80/443 tới IP LAN cố định của máy chủ.
-- Windows Firewall chỉ mở 80/443; không mở 5432/6379.
-- Nếu CGNAT, dùng tunnel có kiểm soát sau khi đánh giá điều khoản, quyền truy cập và cách bảo vệ origin.
+- Schema đúng phiên bản Alembic, MySQL kết nối được.
+- Secret mạnh, CORS/domain đúng; /docs tắt ở production.
+- Quyền user/admin và cách ly tenant.
+- Upload, duyệt tài liệu và xử lý worker.
+- Gemini thật: quota, model và timeout.
+- Webhook SePay thật và đối soát ngân hàng; Telegram thật nếu sử dụng.
+- Sao lưu/phục hồi thử trên database riêng.
 
-## Lệnh vận hành
-
-```powershell
-docker compose config
-docker compose up -d --build
-docker compose ps
-docker compose logs --tail 200 backend worker caddy
-Invoke-RestMethod https://YOUR_DOMAIN/health/ready
-```
-
-Caddy tự xin/gia hạn TLS khi domain công khai hợp lệ và 80/443 tới được máy. `restart: unless-stopped`, health checks và volume bền đã được cấu hình; vẫn cần kiểm thử restart thật.
-
-## Nâng cấp
-
-Backup trước, pull thay đổi đã review, build, rồi chạy `docker compose up -d --build`. Backend chạy migration Alembic trước khi nhận traffic. Với nhiều replica cần tách migration thành một release job duy nhất.
+Không xóa MongoDB cũ trước khi chốt cách giữ/chuyển dữ liệu. Bản MySQL mới chưa tự nhập dữ liệu MongoDB.

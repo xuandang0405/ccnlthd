@@ -13,6 +13,24 @@ Set-Content -Path $DeployLock -Value $PID
 try {
     & (Join-Path $PSScriptRoot "stop-server.ps1") -ForDeployment
 
+    $startupTask = Get-ScheduledTask -TaskName "AI Sales Assistant Server" `
+        -ErrorAction SilentlyContinue
+    if ($startupTask) {
+        Stop-ScheduledTask -TaskName "AI Sales Assistant Server" -ErrorAction SilentlyContinue
+        Disable-ScheduledTask -TaskName "AI Sales Assistant Server" `
+            -ErrorAction SilentlyContinue | Out-Null
+    }
+    $supervisorPath = [IO.Path]::GetFullPath(
+        (Join-Path $PSScriptRoot "supervise-server.ps1")
+    )
+    Get-CimInstance Win32_Process | Where-Object {
+        $_.Name -in @("powershell.exe", "pwsh.exe") -and
+        $_.CommandLine -and
+        $_.CommandLine.IndexOf($supervisorPath, [StringComparison]::OrdinalIgnoreCase) -ge 0
+    } | ForEach-Object {
+        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+
 & (Join-Path $PSScriptRoot "backup-server.ps1")
 
 & npm.cmd ci --prefix $FrontendRoot
@@ -22,24 +40,13 @@ if ($LASTEXITCODE -ne 0) { throw "Frontend build failed." }
 
 Push-Location $BackendRoot
 try {
-    & $PythonExe (Join-Path $PSScriptRoot "prepare-mongodb.py")
-    if ($LASTEXITCODE -ne 0) { throw "MongoDB preparation failed." }
+    & $PythonExe (Join-Path $PSScriptRoot "prepare-mysql.py")
+    if ($LASTEXITCODE -ne 0) { throw "MySQL/schema chua san sang; xem database\HUONG_DAN_MYSQL.md." }
 } finally {
     Pop-Location
 }
 
-& (Join-Path $PSScriptRoot "run-server.ps1")
-
-for ($attempt = 1; $attempt -le 40; $attempt++) {
-    try {
-        $health = Invoke-RestMethod -Uri "http://127.0.0.1:8000/health/ready" -TimeoutSec 2
-        if ($health.status -eq "ready") { break }
-    } catch {}
-    Start-Sleep -Seconds 2
-}
-if ($health.status -ne "ready") { throw "Server readiness check failed." }
-
-    Write-Host "Server is ready at https://seminar.bkpvp.top"
+    Write-Host "Deploy hoan tat. Server dang tat; mo run.bat de khoi dong."
 } finally {
     Remove-Item -LiteralPath $DeployLock -Force -ErrorAction SilentlyContinue
 }
