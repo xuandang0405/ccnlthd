@@ -1,48 +1,33 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
-from typing import Any
 
-from pymongo import ReturnDocument
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.mongodb import new_document
+from app.core.records import make_record, update_record
+from app.models.entities import Chatbot, OrganizationCredit, OrganizationLimit
 
 
 class CreditUnavailableError(RuntimeError):
     pass
 
 
-async def ensure_credit_account(db: Any, organization_id: str, session: Any = None):
-    await db.organization_credits.update_one(
-        {"organization_id": organization_id},
-        {
-            "$setOnInsert": new_document(
-                organization_id=organization_id,
-                free_remaining=20,
-                purchased_remaining=0,
-            )
-        },
-        upsert=True,
-        session=session,
-    )
-    return await db.organization_credits.find_one(
-        {"organization_id": organization_id}, session=session
+async def ensure_credit_account(db: AsyncSession, organization_id: str) -> OrganizationCredit:
+    return await update_record(
+        db,
+        OrganizationCredit,
+        OrganizationCredit.organization_id == organization_id,
+        defaults=make_record(
+            organization_id=organization_id, free_remaining=20, purchased_remaining=0
+        ),
     )
 
 
-async def ensure_organization_limits(db: Any, organization_id: str, session: Any = None):
-    await db.organization_limits.update_one(
-        {"organization_id": organization_id},
-        {
-            "$setOnInsert": new_document(
-                organization_id=organization_id,
-                chatbot_slots=1,
-            )
-        },
-        upsert=True,
-        session=session,
-    )
-    return await db.organization_limits.find_one(
-        {"organization_id": organization_id}, session=session
+async def ensure_organization_limits(db: AsyncSession, organization_id: str) -> OrganizationLimit:
+    return await update_record(
+        db,
+        OrganizationLimit,
+        OrganizationLimit.organization_id == organization_id,
+        defaults=make_record(organization_id=organization_id, chatbot_slots=1),
     )
 
 
@@ -52,47 +37,62 @@ class CreditResult:
     remaining: int
 
 
-async def consume_credit(db: Any, organization_id: str, chatbot_id: str) -> CreditResult:
-    now = datetime.now(UTC)
-    chatbot = await db.chatbots.find_one_and_update(
-        {"_id": chatbot_id, "organization_id": organization_id, "credit_balance": {"$gt": 0}},
-        {"$inc": {"credit_balance": -1, "usage_count": 1}, "$set": {"updated_at": now}},
-        return_document=ReturnDocument.AFTER,
+async def consume_credit(
+    db: AsyncSession, organization_id: str, chatbot_id: str, *, commit: bool = True
+) -> CreditResult:
+    # Các luồng chuyển lượt đều khóa ví trước rồi mới khóa chatbot để tránh deadlock.
+    account = await ensure_credit_account(db, organization_id)
+    chatbot = await db.scalar(
+        select(Chatbot)
+        .where(Chatbot.id == chatbot_id, Chatbot.organization_id == organization_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    if chatbot is not None:
-        return CreditResult(source="CHATBOT", remaining=int(chatbot.get("credit_balance", 0)))
-
-    await ensure_credit_account(db, organization_id)
-    account = await db.organization_credits.find_one_and_update(
-        {"organization_id": organization_id, "free_remaining": {"$gt": 0}},
-        {"$inc": {"free_remaining": -1}, "$set": {"updated_at": now}},
-        return_document=ReturnDocument.AFTER,
-    )
-    if account is None:
+    if chatbot is None:
+        raise CreditUnavailableError("Chatbot không còn tồn tại")
+    if chatbot.credit_balance > 0:
+        chatbot.credit_balance -= 1
+        result = CreditResult(source="CHATBOT", remaining=chatbot.credit_balance)
+    elif account.free_remaining > 0:
+        account.free_remaining -= 1
+        result = CreditResult(source="FREE", remaining=account.free_remaining)
+    else:
         raise CreditUnavailableError(
             "Đã hết lượt chat. Vui lòng mua thêm lượt và phân bổ cho chatbot."
         )
-    await db.chatbots.update_one(
-        {"_id": chatbot_id}, {"$inc": {"usage_count": 1}, "$set": {"updated_at": now}}
-    )
-    return CreditResult(source="FREE", remaining=int(account["free_remaining"]))
+    chatbot.usage_count += 1
+    # Không giữ khóa MySQL trong lúc chờ Gemini trả lời.
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
+    return result
 
 
-async def refund_credit(db: Any, organization_id: str, chatbot_id: str, source: str) -> int:
-    now = datetime.now(UTC)
-    if source == "CHATBOT":
-        chatbot = await db.chatbots.find_one_and_update(
-            {"_id": chatbot_id},
-            {"$inc": {"credit_balance": 1, "usage_count": -1}, "$set": {"updated_at": now}},
-            return_document=ReturnDocument.AFTER,
-        )
-        return int(chatbot.get("credit_balance", 0)) if chatbot else 0
-    account = await db.organization_credits.find_one_and_update(
-        {"organization_id": organization_id},
-        {"$inc": {"free_remaining": 1}, "$set": {"updated_at": now}},
-        return_document=ReturnDocument.AFTER,
+async def refund_credit(
+    db: AsyncSession, organization_id: str, chatbot_id: str, source: str, *, commit: bool = True
+) -> int:
+    account = await ensure_credit_account(db, organization_id)
+    chatbot = await db.scalar(
+        select(Chatbot)
+        .where(Chatbot.id == chatbot_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    await db.chatbots.update_one(
-        {"_id": chatbot_id}, {"$inc": {"usage_count": -1}, "$set": {"updated_at": now}}
-    )
-    return int(account.get("free_remaining", 0)) if account else 0
+    if source == "CHATBOT" and chatbot is not None:
+        chatbot.credit_balance += 1
+        remaining = chatbot.credit_balance
+    elif source == "CHATBOT":
+        # Chatbot bị xóa khi Gemini đang chạy: hoàn lượt đã trả tiền về ví chung.
+        account.purchased_remaining += 1
+        remaining = account.purchased_remaining
+    else:
+        account.free_remaining += 1
+        remaining = account.free_remaining
+    if chatbot is not None:
+        chatbot.usage_count = max(0, chatbot.usage_count - 1)
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
+    return remaining

@@ -1,0 +1,117 @@
+{
+  "environment": "isolated-local-mysql",
+  "started_at": "2026-10-22T04:46:55.921Z",
+  "checks": [
+    {
+      "name": "user_admin_api_denied",
+      "status": 403,
+      "request_id": "7a233771-e816-403e-96c3-ab16842f546b"
+    },
+    {
+      "name": "pending_document_not_used",
+      "passed": true
+    },
+    {
+      "name": "approved_document_used",
+      "passed": true
+    },
+    {
+      "name": "tenant_b_cannot_read_tenant_a_document",
+      "status": 404,
+      "request_id": "3ac95ba5-fd0e-4d9c-9dba-ff2868f4a603"
+    },
+    {
+      "name": "tenant_b_does_not_use_tenant_a_source_or_price",
+      "passed": true
+    },
+    {
+      "name": "user_ticket_admin_reply",
+      "passed": true
+    },
+    {
+      "name": "mobile_no_horizontal_overflow",
+      "passed": true
+    }
+  ],
+  "responses": [
+    {
+      "label": "pending_document",
+      "request_id": "77057aad-495f-409c-9782-d678d2facf76",
+      "request": {
+        "message": "Tai nghe AV17 giá bao nhiêu?",
+        "client_message_id": "db1d6d84-0c76-42de-a56c-7646ec5b4da1"
+      },
+      "response": {
+        "reply": "Hiện tại website chưa có sản phẩm bạn đang tìm hoặc dữ liệu chưa được cập nhật.\n\n*Gemini hiện chưa khả dụng nên thông tin trên được lấy trực tiếp từ dữ liệu đã cập nhật và lượt chat này không bị trừ.*",
+        "conversation_id": "7afac275-1cc5-4295-9574-6308b612c5eb",
+        "remaining_daily": 20,
+        "remaining_credits": 20,
+        "reset_at": null,
+        "sources": []
+      }
+    },
+    {
+      "label": "approved_document",
+      "request_id": "a47d10e3-fbd9-483c-be32-ad6f061abf76",
+      "request": {
+        "message": "Tai nghe AV17 giá bao nhiêu và bảo hành thế nào?",
+        "client_message_id": "16f94ab2-50e1-4cf6-be54-3584ec48e2dc"
+      },
+      "response": {
+        "reply": "Mình tìm thấy thông tin này trong dữ liệu của cửa hàng:\n\n- **Tai nghe Aurora AV17**\n  + **Giá: 789.000 VNĐ**\n  + Tình trạng: Còn hàng.\n  + Bảo hành: 12 tháng.\n\n*Gemini hiện chưa khả dụng nên thông tin trên được lấy trực tiếp từ dữ liệu đã cập nhật và lượt chat này không bị trừ.*",
+        "conversation_id": "85891f49-01e1-4b2f-9bd0-e03b1bdcb92f",
+        "remaining_daily": 20,
+        "remaining_credits": 20,
+        "reset_at": null,
+        "sources": [
+          {
+            "document_id": "e3f46dd8-372e-4b55-a87c-1b97556cea57",
+            "document_name": "Bang-gia-Aurora.docx"
+          }
+        ]
+      }
+    },
+    {
+      "label": "cross_tenant_query",
+      "request_id": "7cefbab4-42de-4f78-b647-adabb0a7a4c3",
+      "request": {
+        "message": "Tai nghe AV17 của cửa hàng Aurora giá bao nhiêu?",
+        "client_message_id": "289049c6-6292-45f6-b412-a85e62a3d5b9"
+      },
+      "response": {
+        "reply": "Hiện tại website chưa có sản phẩm bạn đang tìm hoặc dữ liệu chưa được cập nhật.\n\n- **Loa Beta BT29**\n  + **Giá: 1.269.000 VNĐ**\n  + Tình trạng: Còn hàng.\n  + Bảo hành: 12 tháng.\n\n*Gemini hiện chưa khả dụng nên thông tin trên được lấy trực tiếp từ dữ liệu đã cập nhật và lượt chat này không bị trừ.*",
+        "conversation_id": "ac7620db-0dce-4036-aacc-d0423f7ed4ba",
+        "remaining_daily": 20,
+        "remaining_credits": 20,
+        "reset_at": null,
+        "sources": [
+          {
+            "document_id": "3b252807-81f3-4a27-a82a-c792ecc74bdd",
+            "document_name": "Bang-gia-Beta.docx"
+          }
+        ]
+      }
+    }
+  ],
+  "screenshots": [
+    "01-trang-chu.png",
+    "04-dang-nhap.png",
+    "05-user-khong-vao-admin.png",
+    "06-chat-chua-co-tai-lieu-duyet.png",
+    "07-admin-duyet-tai-lieu.png",
+    "08-user-tai-lieu-da-duyet.png",
+    "09-chat-tu-tai-lieu-da-duyet.png",
+    "10-chat-cach-ly-hai-doanh-nghiep.png",
+    "11-lich-su-hoi-thoai.png",
+    "12-user-ticket-ho-tro.png",
+    "13-admin-tra-loi-ticket.png",
+    "14-tong-quan-admin.png",
+    "15-goi-va-thanh-toan.png",
+    "16-swagger-api.png",
+    "17-trang-chu-mobile.png"
+  ],
+  "page_errors": [],
+  "document_a": "e3f46dd8-372e-4b55-a87c-1b97556cea57",
+  "document_b": "3b252807-81f3-4a27-a82a-c792ecc74bdd",
+  "completed_at": "2026-10-22T04:47:53.849Z"
+}

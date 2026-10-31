@@ -1,0 +1,41 @@
+{
+  "measured_at_utc": "2026-10-14T03:51:49.475119+00:00",
+  "os": "Windows-10-10.0.19045-SP0",
+  "cpu": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
+  "logical_cpu_count": 20,
+  "installed_ram_gib": 16.0,
+  "python": "3.14.7",
+  "workers": 1,
+  "virtual_users": 10,
+  "iterations_per_case": 100,
+  "simulated_wait_ms": 30,
+  "database": "not used",
+  "connection_pool": "not used",
+  "results": [
+    {
+      "mode": "blocking",
+      "requests": 100,
+      "requests_per_second": 31.80767299676468,
+      "p95_ms": 317.06636000000003,
+      "mean_ms": 304.158592,
+      "error_rate": 0
+    },
+    {
+      "mode": "await",
+      "requests": 100,
+      "requests_per_second": 218.3727951171843,
+      "p95_ms": 48.5209,
+      "mean_ms": 45.333075000000015,
+      "error_rate": 0
+    },
+    {
+      "mode": "thread",
+      "requests": 100,
+      "requests_per_second": 282.9119218800969,
+      "p95_ms": 50.4615,
+      "mean_ms": 34.13218199999999,
+      "error_rate": 0
+    }
+  ],
+  "limitation": "One local run with simulated I/O, not production or Gemini load."
+}

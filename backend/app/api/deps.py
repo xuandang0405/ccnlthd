@@ -1,28 +1,30 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID
 
 from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.mongodb import MongoRecord, get_mongo_db, record
+from app.core.database import Base, get_db
 from app.core.security import decode_access_token, session_expiration
+from app.models.entities import Organization, OrganizationMember, RefreshSession, User
 
 bearer = HTTPBearer(auto_error=False)
 
 
 @dataclass(frozen=True)
 class TenantContext:
-    user: MongoRecord
-    organization: MongoRecord
-    membership: MongoRecord
+    user: Base
+    organization: Base
+    membership: Base
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-    db: Any = Depends(get_mongo_db),
-) -> MongoRecord:
+    db: AsyncSession = Depends(get_db, scope="function"),
+) -> Base:
     if not credentials or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Chưa đăng nhập")
     try:
@@ -30,8 +32,18 @@ async def get_current_user(
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
-    session = await db.refresh_sessions.find_one({"_id": str(session_id)})
-    user_document = await db.users.find_one({"_id": str(user_id)})
+    session = await db.scalar(
+        select(RefreshSession)
+        .where(RefreshSession.id == str(session_id))
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
+    user_document = await db.scalar(
+        select(User)
+        .where(User.id == str(user_id))
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
     if (
         not session
         or session.get("user_id") != str(user_id)
@@ -41,31 +53,42 @@ async def get_current_user(
         or not user_document.get("is_active", False)
     ):
         raise HTTPException(status_code=401, detail="Phiên đăng nhập không hợp lệ")
-    return record(user_document)
+    return user_document
 
 
 async def get_tenant_context(
     x_organization_id: UUID = Header(alias="X-Organization-ID"),
-    user: MongoRecord = Depends(get_current_user),
-    db: Any = Depends(get_mongo_db),
+    user: Base = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> TenantContext:
     organization_id = str(x_organization_id)
-    membership_document = await db.organization_members.find_one(
-        {"organization_id": organization_id, "user_id": str(user.id)}
+    membership_document = await db.scalar(
+        select(OrganizationMember)
+        .where(
+            and_(
+                OrganizationMember.organization_id == organization_id,
+                OrganizationMember.user_id == str(user.id),
+            )
+        )
+        .limit(1)
+        .execution_options(populate_existing=True)
     )
-    organization_document = await db.organizations.find_one(
-        {"_id": organization_id, "is_active": True}
+    organization_document = await db.scalar(
+        select(Organization)
+        .where(and_(Organization.id == organization_id, Organization.is_active.is_(True)))
+        .limit(1)
+        .execution_options(populate_existing=True)
     )
     if membership_document is None or organization_document is None:
         raise HTTPException(status_code=403, detail="Không có quyền truy cập doanh nghiệp")
     return TenantContext(
         user=user,
-        organization=record(organization_document),
-        membership=record(membership_document),
+        organization=organization_document,
+        membership=membership_document,
     )
 
 
-async def get_super_admin(user: MongoRecord = Depends(get_current_user)) -> MongoRecord:
+async def get_super_admin(user: Base = Depends(get_current_user)) -> Base:
     if not user.get("is_super_admin", False):
         raise HTTPException(status_code=403, detail="Chỉ quản trị viên hệ thống được truy cập")
     return user

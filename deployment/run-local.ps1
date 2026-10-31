@@ -100,7 +100,7 @@ if (-not (Test-Path $PythonExe)) {
 }
 
 Write-Host "[2/6] Kiem tra thu vien Backend..."
-& $PythonExe -c "import fastapi, pymongo" 2>$null
+& $PythonExe -c "import fastapi, sqlalchemy, aiomysql" 2>$null
 if ($LASTEXITCODE -ne 0) {
     & $PythonExe -m pip install -e "${BackendRoot}[dev]"
     if ($LASTEXITCODE -ne 0) { throw "Khong cai duoc thu vien Backend." }
@@ -122,25 +122,24 @@ $env:APP_ENV = "development"
 $env:APP_SECRET_KEY = Get-Content $secretPath -Raw
 $env:APP_PUBLIC_URL = "http://127.0.0.1:5173"
 $env:FRONTEND_ORIGIN = "http://127.0.0.1:5173"
-$env:DATABASE_BACKEND = "mongodb"
-$env:MONGODB_DATABASE = "ai_sales_assistant_local"
-$env:RATE_LIMIT_BACKEND = "mongodb"
+$env:DATABASE_BACKEND = "sql"
+$env:RATE_LIMIT_BACKEND = "sql"
 $env:REDIS_URL = "redis://127.0.0.1:6379/0"
 $env:UPLOAD_DIR = "storage/uploads"
 
-Write-Host "[4/6] Kiem tra MongoDB Atlas..."
+Write-Host "[4/6] Kiem tra MySQL va schema..."
 Push-Location $BackendRoot
 try {
-    & $PythonExe (Join-Path $PSScriptRoot "prepare-mongodb.py")
+    & $PythonExe (Join-Path $PSScriptRoot "prepare-mysql.py")
     if ($LASTEXITCODE -ne 0) {
-        throw "Khong the ket noi MongoDB. Hay kiem tra Atlas Network Access / IP Access List."
+        throw "MySQL chua san sang. Xem database\HUONG_DAN_MYSQL.md."
     }
 } finally {
     Pop-Location
 }
 
 Write-Host "[5/6] Khoi dong Backend, workers va Frontend..."
-$processNames = @("backend", "document-worker", "notification-worker", "frontend")
+$processNames = @("backend", "document-worker", "frontend")
 foreach ($processName in $processNames) { Stop-LocalProcess $processName }
 
 $managedProcesses = @()
@@ -148,7 +147,6 @@ $managedProcesses += Start-ForegroundProcess "backend" $PythonExe @(
     "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8001"
 ) $BackendRoot
 $managedProcesses += Start-ForegroundProcess "document-worker" $PythonExe @("-m", "app.workers.documents") $BackendRoot
-$managedProcesses += Start-ForegroundProcess "notification-worker" $PythonExe @("-m", "app.workers.notifications") $BackendRoot
 $npmExe = (Get-Command npm.cmd).Source
 $env:VITE_DEV_API_TARGET = "http://127.0.0.1:8001"
 $managedProcesses += Start-ForegroundProcess "frontend" $npmExe @("run", "dev", "--", "--host", "127.0.0.1") $FrontendRoot
@@ -175,9 +173,8 @@ Write-Host "  Test Widget      : http://127.0.0.1:5173/widget-test.html"
 Write-Host "  Widget Script    : http://127.0.0.1:5173/widget.js"
 Write-Host "  Tai lieu API     : http://127.0.0.1:8001/docs"
 Write-Host "  Kiem tra Backend : http://127.0.0.1:8001/health/ready"
-Write-Host "Du lieu test: MongoDB Atlas / ai_sales_assistant_local"
+Write-Host "Du lieu: MySQL theo DATABASE_URL trong backend/.env (khong tu doi database)."
 Write-Host "Log dang hien truc tiep trong cua so run.bat."
-Write-Host "Production van chay rieng tai https://seminar.bkpvp.top"
 Start-Process "http://127.0.0.1:5173"
 Write-Host ""
 Write-Host "GIU CUA SO NAY MO DE WEBSITE HOAT DONG. Nhan Ctrl+C de dung."

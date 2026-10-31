@@ -1,0 +1,52 @@
+{
+  "source_id": "ed8ba4f7a1801d4aa57a90a484d20393397db82dd9df48a4a8f798f7d2c05df7",
+  "git_head_base_only": "e6639c35e937153319fee66399d645168c236966",
+  "working_tree_is_dirty": true,
+  "environment": {
+    "backend_image_id": "sha256:9a6cc39ff991f8335697032f82730623f4dd652a43961ca055b063251429a890",
+    "frontend_image_id": "sha256:aed1360e8a4cbf144a1152dea41053186e6d1cad6910603412bfb87f6dafd321",
+    "mysql_image_id": "sha256:24989179f58856db763f418010c1169fecc944e3ec1ea7e921572d83eb070f70",
+    "docker_python": "Python 3.12.15",
+    "mysql": "mysql  Ver 8.4.11 for Linux on x86_64 (MySQL Community Server - GPL)",
+    "model": "gemini-3.1-flash-lite",
+    "database": "ccnlthd_test_20261026_e2e",
+    "rate_limit_backend": "sql",
+    "base_url": "http://127.0.0.1:18026",
+    "gemini_timeout_seconds": "50",
+    "gemini_attempt_timeout_seconds": "10",
+    "email_enabled": false,
+    "sepay_configured": false,
+    "synthetic_data_only": true,
+    "pre_freeze_backend_image_id": "sha256:72df72e52090b9daf3ad57c6504e32b6aefe40b7a31e87ad43212a053a1715c7",
+    "final_image_tag": "ccnlthd-backend:acceptance-20261026-final"
+  },
+  "schema_revision": "20261022_chat_retry",
+  "table_count_in_test_snapshot": 32,
+  "database_snapshot_sha256": "e69a5207d4990157472d3d5f742e0133639d7319050e391fe8bcdabe4ffb48f2",
+  "source_archive_sha256": "e0c174d98e4e66e921b5ad6ca8991efadd753bc4afa5e04e86ad5a344c48351e",
+  "application_files_verified_against_running_container": 59,
+  "tests_do_not_add_overlapping_suites": {
+    "mysql": {
+      "tests": 163,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 163,
+      "seconds": 67.34
+    },
+    "sqlite": {
+      "tests": 163,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 13,
+      "passed": 150,
+      "seconds": 26.489
+    }
+  },
+  "llm_final_cases": 7,
+  "llm_final_passed": true,
+  "flows_final_passed": true,
+  "final_acl_checks": 3,
+  "snapshot_scope": "Synthetic local MySQL only. Not a restore test or production deployment.",
+  "captured_at": "2026-10-26T23:05:54.964048+07:00"
+}

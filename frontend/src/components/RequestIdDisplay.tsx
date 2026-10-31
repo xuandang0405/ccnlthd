@@ -20,7 +20,7 @@ export function RequestIdDisplay({ requestId, compact = false }: RequestIdDispla
 
   if (compact) {
     return (
-      <div className="inline-flex items-center gap-2 font-mono text-[11px] bg-slate-100 border border-slate-300 px-2 py-1 text-slate-700">
+      <div className="inline-flex items-center gap-2 font-sans text-xs bg-slate-100 border border-slate-300 px-2 py-1 text-slate-700">
         <span>REQ: {requestId}</span>
         <button
           type="button"
@@ -39,26 +39,26 @@ export function RequestIdDisplay({ requestId, compact = false }: RequestIdDispla
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Terminal size={14} className="text-slate-500" />
-          <span className="font-mono text-xs font-bold text-slate-600 uppercase tracking-wider">
-            REQUEST ID TRACE
+          <span className="font-sans text-sm font-bold text-slate-600 normal-case tracking-wider">
+            Mã hỗ trợ
           </span>
         </div>
         <button
           type="button"
           onClick={handleCopy}
-          className="btn-swiss-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1 font-mono"
+          className="btn-swiss-secondary text-sm py-1 px-2.5 inline-flex items-center gap-1 font-sans"
         >
           {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
-          <span>{copied ? "ĐÃ CHÉP" : "COPY ID"}</span>
+          <span>{copied ? "Đã chép" : "Sao chép mã"}</span>
         </button>
       </div>
 
-      <div className="mt-2 font-mono text-xs text-slate-800 bg-white border border-slate-200 px-2.5 py-1.5 break-all select-all">
+      <div className="mt-2 font-sans text-sm text-slate-800 bg-white border border-slate-200 px-2.5 py-1.5 break-all select-all">
         {requestId}
       </div>
 
-      <p className="mt-1.5 text-[11px] text-slate-500 font-sans">
-        Dùng Request ID này để tra cứu chi tiết trong server console log (FastAPI HTTP middleware context) khi bảo vệ hoặc gỡ lỗi.
+      <p className="mt-1.5 text-xs text-slate-500 font-sans">
+        Gửi mã này kèm yêu cầu hỗ trợ để quản trị viên kiểm tra sự cố.
       </p>
     </div>
   );
@@ -79,9 +79,9 @@ export function RequestIdHelper() {
     <div className="card-swiss p-5 border-slate-200 bg-white">
       <div className="flex items-center gap-2 text-slate-900 mb-2">
         <Terminal size={18} className="text-blue-600" />
-        <h3 className="font-bold text-base">REQUEST ID TRACE HELPER (OBSERVABILITY)</h3>
+        <h3 className="font-bold text-base">Tra cứu mã hỗ trợ</h3>
       </div>
-      <p className="text-xs text-slate-600 leading-5">
+      <p className="text-sm text-slate-600 leading-5">
         Mỗi request qua hệ thống đều được FastAPI gán một <code>X-Request-ID</code> duy nhất. Tìm ID này trong log tại cửa sổ <code>run.bat</code> đang chạy trên máy chủ.
       </p>
 
@@ -91,21 +91,21 @@ export function RequestIdHelper() {
           value={inputVal}
           onChange={(e) => setInputVal(e.target.value)}
           placeholder="Nhập mã req-xxxxxxxx hoặc UUID..."
-          className="input-swiss flex-1 min-w-[240px] font-mono text-xs"
+          className="input-swiss flex-1 min-w-[240px] font-sans text-sm"
         />
         <button
           type="button"
           disabled={!inputVal.trim()}
           onClick={copyRequestId}
-          className="btn-swiss-secondary text-xs"
+          className="btn-swiss-secondary text-sm"
         >
-          {copied ? "ĐÃ CHÉP REQUEST ID" : "CHÉP REQUEST ID"}
+          {copied ? "Đã sao chép" : "Sao chép mã"}
         </button>
       </div>
 
       {inputVal && (
-        <div className="mt-3 bg-slate-950 p-3 font-mono text-xs text-slate-200">
-          <p className="text-slate-400 text-[11px] mb-1"># Tìm chuỗi này trong log của cửa sổ run.bat:</p>
+        <div className="mt-3 bg-slate-950 p-3 font-sans text-sm text-slate-200">
+          <p className="text-slate-400 text-xs mb-1"># Tìm chuỗi này trong log của cửa sổ run.bat:</p>
           <code>{inputVal.trim()}</code>
         </div>
       )}

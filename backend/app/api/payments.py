@@ -10,13 +10,26 @@ from urllib.parse import quote, urlencode
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from pymongo.errors import DuplicateKeyError
+from sqlalchemy import and_, func, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_tenant_context
-from app.core.config import get_settings
-from app.core.mongodb import get_mongo_db, new_document, record
+from app.core.config import Settings, get_settings
+from app.core.database import get_db
+from app.core.records import add_record, make_record
 from app.core.security import ensure_utc
-from app.models.entities import MemberRole, PaymentStatus
+from app.models.entities import (
+    AuditLog,
+    Chatbot,
+    MemberRole,
+    OrganizationCredit,
+    OrganizationLimit,
+    PaymentOrder,
+    PaymentStatus,
+    Plan,
+    Transaction,
+)
 from app.schemas.payment import (
     CreditBalanceResponse,
     PaymentOrderResponse,
@@ -40,8 +53,12 @@ ORDER_PATTERN = re.compile(
 
 
 @router.get("/public/plans", response_model=list[PublicPlanResponse])
-async def public_plans(db: Any = Depends(get_mongo_db)):
-    plans = await db.plans.find({"is_active": True}).to_list(None)
+async def public_plans(db: AsyncSession = Depends(get_db, scope="function")):
+    plans = (
+        await db.scalars(
+            select(Plan).where(Plan.is_active.is_(True)).execution_options(populate_existing=True)
+        )
+    ).all()
     by_code = {plan["code"]: plan for plan in plans}
     free = by_code.get("FREE", {})
     return [
@@ -67,7 +84,8 @@ async def payment_products():
 
 @router.get("/payments/balance", response_model=CreditBalanceResponse)
 async def credit_balance(
-    context: TenantContext = Depends(get_tenant_context), db: Any = Depends(get_mongo_db)
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     organization_id = str(context.organization.id)
     account = await ensure_credit_account(db, organization_id)
@@ -76,7 +94,11 @@ async def credit_balance(
         free_remaining=int(account.get("free_remaining", 0)),
         purchased_remaining=int(account.get("purchased_remaining", 0)),
         chatbot_slots=int(limits.get("chatbot_slots", 1)),
-        chatbot_count=await db.chatbots.count_documents({"organization_id": organization_id}),
+        chatbot_count=await db.scalar(
+            select(func.count())
+            .select_from(Chatbot)
+            .where(Chatbot.organization_id == organization_id)
+        ),
     )
 
 
@@ -124,7 +146,7 @@ def vietqr_url(settings: Any, order: Any) -> str:
 async def create_product_order(
     product_code: str,
     context: TenantContext = Depends(get_tenant_context),
-    db: Any = Depends(get_mongo_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     require_owner(context)
     settings = payment_config()
@@ -132,7 +154,7 @@ async def create_product_order(
     if product is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy gói thanh toán")
     now = datetime.now(UTC)
-    order = new_document(
+    order = make_record(
         organization_id=str(context.organization.id),
         product_code=product["code"],
         product_name=product["name"],
@@ -143,18 +165,20 @@ async def create_product_order(
         status=PaymentStatus.PENDING.value,
         expires_at=now + timedelta(minutes=30),
     )
-    await db.payment_orders.insert_one(order)
-    await db.audit_logs.insert_one(
-        new_document(
+    order = await add_record(db, PaymentOrder, order)
+    await add_record(
+        db,
+        AuditLog,
+        make_record(
             organization_id=str(context.organization.id),
             actor_user_id=str(context.user.id),
             action="PAYMENT_ORDER_CREATED",
             resource_type="payment_order",
-            resource_id=order["_id"],
+            resource_id=order["id"],
             metadata_redacted=None,
-        )
+        ),
     )
-    wrapped = record(order)
+    wrapped = order
     return PaymentOrderResponse(
         id=wrapped.id,
         order_code=wrapped.order_code,
@@ -177,10 +201,19 @@ async def create_product_order(
 async def get_order(
     order_id: UUID,
     context: TenantContext = Depends(get_tenant_context),
-    db: Any = Depends(get_mongo_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
-    query = {"_id": str(order_id), "organization_id": str(context.organization.id)}
-    order = await db.payment_orders.find_one(query)
+    query = and_(
+        PaymentOrder.id == str(order_id),
+        PaymentOrder.organization_id == str(context.organization.id),
+    )
+    order = await db.scalar(
+        select(PaymentOrder)
+        .where(query)
+        .with_for_update()
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
     if order is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy đơn thanh toán")
     if (
@@ -189,16 +222,21 @@ async def get_order(
         and ensure_utc(order["expires_at"]) <= datetime.now(UTC)
     ):
         order["status"] = PaymentStatus.EXPIRED.value
-        await db.payment_orders.update_one(
-            query, {"$set": {"status": order["status"], "updated_at": datetime.now(UTC)}}
+        await db.execute(
+            update(PaymentOrder)
+            .where(query)
+            .values(**{**{"status": order["status"], "updated_at": datetime.now(UTC)}})
         )
-    return record(order)
+    return order
 
 
 async def authenticate_sepay(
-    request: Request, authorization: str | None, signature: str | None, timestamp: str | None
+    request: Request,
+    authorization: str | None,
+    signature: str | None,
+    timestamp: str | None,
+    settings: Settings,
 ) -> None:
-    settings = get_settings()
     mode = (settings.sepay_auth_mode or "").upper()
     if mode == "API_KEY" and settings.sepay_api_key is not None:
         expected = f"Apikey {settings.sepay_api_key.get_secret_value()}"
@@ -242,17 +280,23 @@ async def sepay_webhook(
     authorization: Annotated[str | None, Header()] = None,
     x_sepay_signature: Annotated[str | None, Header()] = None,
     x_sepay_timestamp: Annotated[str | None, Header()] = None,
-    db: Any = Depends(get_mongo_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
+    settings: Settings = Depends(get_settings),
 ):
-    await authenticate_sepay(request, authorization, x_sepay_signature, x_sepay_timestamp)
+    await authenticate_sepay(request, authorization, x_sepay_signature, x_sepay_timestamp, settings)
     provider_id = str(payload.id)
     order_code = extract_order_code(payload)
     if order_code is None:
         return WebhookAcknowledgement()
-    order = await db.payment_orders.find_one({"order_code": order_code})
+    order = await db.scalar(
+        select(PaymentOrder)
+        .where(PaymentOrder.order_code == order_code)
+        .with_for_update()
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
     if order is None:
         return WebhookAcknowledgement()
-    settings = get_settings()
     now = datetime.now(UTC)
     valid = (
         payload.transferType.lower() == "in"
@@ -262,9 +306,9 @@ async def sepay_webhook(
         and (not order.get("expires_at") or ensure_utc(order["expires_at"]) > now)
     )
     tx_status = PaymentStatus.SUCCESS.value if valid else PaymentStatus.REVIEW.value
-    transaction = new_document(
+    transaction = make_record(
         organization_id=order["organization_id"],
-        payment_order_id=order["_id"],
+        payment_order_id=order["id"],
         provider="SEPAY",
         provider_transaction_id=provider_id,
         amount=payload.transferAmount,
@@ -283,82 +327,101 @@ async def sepay_webhook(
         ),
     )
     try:
-        async with db.client.start_session() as mongo_session:
-            async with await mongo_session.start_transaction():
-                await db.transactions.insert_one(transaction, session=mongo_session)
-                if not valid:
-                    return WebhookAcknowledgement()
-                updated = await db.payment_orders.update_one(
-                    {"_id": order["_id"], "status": PaymentStatus.PENDING.value},
-                    {"$set": {"status": PaymentStatus.SUCCESS.value, "updated_at": now}},
-                    session=mongo_session,
+        async with db.begin_nested():
+            transaction = await add_record(db, Transaction, transaction)
+            if not valid:
+                return WebhookAcknowledgement()
+            updated = await db.execute(
+                update(PaymentOrder)
+                .where(
+                    and_(
+                        PaymentOrder.id == order["id"],
+                        PaymentOrder.status == PaymentStatus.PENDING.value,
+                    )
                 )
-                if not updated.modified_count:
-                    await db.transactions.update_one(
-                        {"_id": transaction["_id"]},
-                        {"$set": {"status": PaymentStatus.REVIEW.value}},
-                        session=mongo_session,
-                    )
-                    return WebhookAcknowledgement()
-                if order["product_type"] == "CHAT_CREDITS":
-                    account = await db.organization_credits.find_one(
-                        {"organization_id": order["organization_id"]}, session=mongo_session
-                    )
-                    if account is None:
-                        await db.organization_credits.insert_one(
-                            new_document(
-                                organization_id=order["organization_id"],
-                                free_remaining=20,
-                                purchased_remaining=order["quantity"],
-                            ),
-                            session=mongo_session,
-                        )
-                    else:
-                        await db.organization_credits.update_one(
-                            {"_id": account["_id"]},
-                            {
-                                "$inc": {"purchased_remaining": order["quantity"]},
-                                "$set": {"updated_at": now},
-                            },
-                            session=mongo_session,
-                        )
-                elif order["product_type"] == "CHATBOT_SLOT":
-                    limits = await db.organization_limits.find_one(
-                        {"organization_id": order["organization_id"]}, session=mongo_session
-                    )
-                    if limits is None:
-                        await db.organization_limits.insert_one(
-                            new_document(
-                                organization_id=order["organization_id"],
-                                chatbot_slots=1 + order["quantity"],
-                            ),
-                            session=mongo_session,
-                        )
-                    else:
-                        await db.organization_limits.update_one(
-                            {"_id": limits["_id"]},
-                            {
-                                "$inc": {"chatbot_slots": order["quantity"]},
-                                "$set": {"updated_at": now},
-                            },
-                            session=mongo_session,
-                        )
-                await db.audit_logs.insert_one(
-                    new_document(
-                        organization_id=order["organization_id"],
-                        actor_user_id=None,
-                        action="PAYMENT_CONFIRMED_PRODUCT_GRANTED",
-                        resource_type="payment_order",
-                        resource_id=order["_id"],
-                        metadata_redacted=json.dumps(
-                            {
-                                "provider_transaction_id": provider_id,
-                                "product_code": order["product_code"],
-                            }
+                .values(**{**{"status": PaymentStatus.SUCCESS.value, "updated_at": now}})
+            )
+            if not updated.rowcount:
+                await db.execute(
+                    update(Transaction)
+                    .where(Transaction.id == transaction["id"])
+                    .values(**{**{"status": PaymentStatus.REVIEW.value}})
+                )
+                return WebhookAcknowledgement()
+            if order["product_type"] == "CHAT_CREDITS":
+                account = await db.scalar(
+                    select(OrganizationCredit)
+                    .where(OrganizationCredit.organization_id == order["organization_id"])
+                    .limit(1)
+                    .execution_options(populate_existing=True)
+                )
+                if account is None:
+                    await add_record(
+                        db,
+                        OrganizationCredit,
+                        make_record(
+                            organization_id=order["organization_id"],
+                            free_remaining=20,
+                            purchased_remaining=order["quantity"],
                         ),
-                    ),
-                    session=mongo_session,
+                    )
+                else:
+                    await db.execute(
+                        update(OrganizationCredit)
+                        .where(OrganizationCredit.id == account["id"])
+                        .values(
+                            **{
+                                **{"updated_at": now},
+                                "purchased_remaining": OrganizationCredit.purchased_remaining
+                                + order["quantity"],
+                            }
+                        )
+                    )
+            elif order["product_type"] == "CHATBOT_SLOT":
+                limits = await db.scalar(
+                    select(OrganizationLimit)
+                    .where(OrganizationLimit.organization_id == order["organization_id"])
+                    .limit(1)
+                    .execution_options(populate_existing=True)
                 )
-    except DuplicateKeyError:
+                if limits is None:
+                    await add_record(
+                        db,
+                        OrganizationLimit,
+                        make_record(
+                            organization_id=order["organization_id"],
+                            chatbot_slots=1 + order["quantity"],
+                        ),
+                    )
+                else:
+                    await db.execute(
+                        update(OrganizationLimit)
+                        .where(OrganizationLimit.id == limits["id"])
+                        .values(
+                            **{
+                                **{"updated_at": now},
+                                "chatbot_slots": OrganizationLimit.chatbot_slots
+                                + order["quantity"],
+                            }
+                        )
+                    )
+            await add_record(
+                db,
+                AuditLog,
+                make_record(
+                    organization_id=order["organization_id"],
+                    actor_user_id=None,
+                    action="PAYMENT_CONFIRMED_PRODUCT_GRANTED",
+                    resource_type="payment_order",
+                    resource_id=order["id"],
+                    metadata_redacted=json.dumps(
+                        {
+                            "provider_transaction_id": provider_id,
+                            "product_code": order["product_code"],
+                        }
+                    ),
+                ),
+            )
+    except IntegrityError:
         return WebhookAcknowledgement()
     return WebhookAcknowledgement()

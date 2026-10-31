@@ -1,0 +1,85 @@
+{
+  "review_date": "2026-10-14",
+  "host_python": "3.14.7",
+  "versions": {
+    "fastapi": "0.141.1",
+    "pydantic": "2.13.5",
+    "sqlalchemy": "2.0.54",
+    "aiomysql": "0.3.2",
+    "alembic": "1.20.0",
+    "pytest": "8.4.2",
+    "pytest-cov": "6.3.0",
+    "httpx": "0.28.1",
+    "anyio": "4.15.1",
+    "uvicorn": "0.53.0"
+  },
+  "mysql": "8.4, isolated Docker container on port 13316",
+  "test_suites": {
+    "mysql": {
+      "total": 77,
+      "passed": 77,
+      "skipped": 0,
+      "failures": 0,
+      "errors": 0
+    },
+    "sqlite": {
+      "total": 77,
+      "passed": 71,
+      "skipped": 6,
+      "failures": 0,
+      "errors": 0
+    }
+  },
+  "coverage": {
+    "line_percent": 82.56,
+    "branch_percent": 57.12,
+    "combined_percent": 78.4,
+    "modules": [
+      {
+        "file": "backend/app/main.py",
+        "line_percent": 89.19,
+        "branch_percent": 54.17
+      },
+      {
+        "file": "backend/app/api/auth.py",
+        "line_percent": 82.57,
+        "branch_percent": 57.14
+      },
+      {
+        "file": "backend/app/api/deps.py",
+        "line_percent": 97.22,
+        "branch_percent": 87.5
+      },
+      {
+        "file": "backend/app/api/payments.py",
+        "line_percent": 85.52,
+        "branch_percent": 59.52
+      },
+      {
+        "file": "backend/app/core/errors.py",
+        "line_percent": 100.0,
+        "branch_percent": 100.0
+      },
+      {
+        "file": "backend/app/core/observability.py",
+        "line_percent": 100.0,
+        "branch_percent": 50.0
+      },
+      {
+        "file": "backend/app/core/security.py",
+        "line_percent": 96.0,
+        "branch_percent": 50.0
+      },
+      {
+        "file": "backend/app/services/credits.py",
+        "line_percent": 93.02,
+        "branch_percent": 75.0
+      }
+    ]
+  },
+  "critical_coverage_gate": "80% combined for core/errors.py, core/observability.py, core/security.py; measured 95%",
+  "frontend": "14 passed; ESLint, TypeScript and Vite build passed; existing zod annotation warning",
+  "migration": "20261010_mysql_initial; alembic check: no new upgrade operations",
+  "github_ci": "not run; user requested local completion and a staged ZIP, not a push",
+  "external_services": "real Gemini, SePay, Telegram, SMTP and public HTTPS not tested"
+}

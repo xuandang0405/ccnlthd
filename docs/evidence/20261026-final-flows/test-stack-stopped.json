@@ -1,0 +1,12 @@
+{
+  "stopped_and_removed": [
+    "ccnlthd-test-web-20261026",
+    "ccnlthd-test-api-20261026",
+    "ccnlthd-test-worker-20261026",
+    "ccnlthd-test-mysql-20261026"
+  ],
+  "synthetic_data_saved_in": "database-test.sql",
+  "production_resources_changed": false,
+  "images_retained": true,
+  "finished_at_utc": "2026-10-26T16:05:57.602592+00:00"
+}

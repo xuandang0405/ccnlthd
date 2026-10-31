@@ -1,0 +1,51 @@
+{
+  "environment": "isolated-local-mysql",
+  "external_sepay": false,
+  "checks": [
+    {
+      "name": "revoked_document_and_stale_source_panel_cleared",
+      "passed": true
+    },
+    {
+      "name": "worker_missing_file_then_ui_retry",
+      "passed": true,
+      "document_id": "2e23bc25-486c-496a-9bed-666f68d6efc5",
+      "fault": "temporarily_moved_test_upload_only"
+    },
+    {
+      "name": "local_signed_webhook_not_external_sepay",
+      "bad_signature": {
+        "status": 401,
+        "request_id": "785a00d5-fc01-4326-89d6-7c42ffb0f12f"
+      },
+      "expired_timestamp": {
+        "status": 401,
+        "request_id": "634ae610-96aa-4862-b0ba-42889e2e28b1"
+      },
+      "valid": {
+        "status": 200,
+        "request_id": "36f382c6-434d-4905-8571-0b66ef7cd9fc"
+      },
+      "duplicate": {
+        "status": 200,
+        "request_id": "019f4776-c762-453d-85a0-84790e2974ec"
+      },
+      "balance_before": 0,
+      "balance_after_once": 100,
+      "balance_after_duplicate": 100
+    },
+    {
+      "name": "support_image_uploaded_and_visible_to_admin",
+      "passed": true
+    }
+  ],
+  "screenshots": [
+    "18-thu-hoi-duyet-khong-con-nguon-cu.png",
+    "19-worker-loi-co-nut-thu-lai.png",
+    "20-worker-thu-lai-thanh-cong.png",
+    "21-qr-don-hang-test-dang-cho.png",
+    "22-webhook-local-xac-nhan-don-test.png",
+    "23-user-gui-anh-trong-ticket.png",
+    "24-admin-nhan-anh-ticket.png"
+  ]
+}

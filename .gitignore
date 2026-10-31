@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.docker.example
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -8,6 +9,8 @@ __pycache__/
 .mypy_cache/
 .coverage
 htmlcov/
+coverage.xml
+test-results.xml
 .venv/
 backend/storage/
 frontend/node_modules/
@@ -18,6 +21,7 @@ frontend/vite.config.d.ts
 playwright-report/
 test-results/
 *.log
+!docs/evidence/20261014/async-benchmark/*.log
 *.db
 *.db-shm
 *.db-wal
@@ -26,5 +30,11 @@ test-results/
 *.key
 *.p12
 *.rar
+*.zip
+*.7z
+*.bak
+*.tmp
+*.orig
+*.rej
 .DS_Store
 Thumbs.db

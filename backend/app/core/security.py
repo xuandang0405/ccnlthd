@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+from anyio import to_thread
 from jose import JWTError, jwt
 from pwdlib import PasswordHash
 
@@ -20,6 +21,14 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, encoded: str) -> bool:
     return password_hash.verify(password, encoded)
+
+
+async def hash_password_async(password: str) -> str:
+    return await to_thread.run_sync(hash_password, password)
+
+
+async def verify_password_async(password: str, encoded: str) -> bool:
+    return await to_thread.run_sync(verify_password, password, encoded)
 
 
 def create_access_token(user_id: UUID, session_id: UUID) -> tuple[str, datetime]:

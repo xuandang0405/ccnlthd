@@ -1,15 +1,17 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
 from uuid import UUID, uuid4
 
 from anyio import to_thread
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy import and_, delete, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import TenantContext, get_tenant_context
 from app.core.config import get_settings
-from app.core.mongodb import MongoRecord, get_mongo_db, new_document, record
-from app.models.entities import DocumentStatus
+from app.core.database import Base, get_db
+from app.core.records import add_record, make_record
+from app.models.entities import ChatbotDocument, Document, DocumentChunk, DocumentStatus
 from app.schemas.document import DocumentPreview, DocumentResponse
 from app.services.documents import (
     UnsafeDocumentError,
@@ -22,25 +24,34 @@ router = APIRouter(prefix="/documents", tags=["Documents"])
 settings = get_settings()
 
 
-async def owned_document(db: Any, document_id: UUID, organization_id: str) -> MongoRecord:
-    document = await db.documents.find_one(
-        {"_id": str(document_id), "organization_id": str(organization_id)}
+async def owned_document(db: AsyncSession, document_id: UUID, organization_id: str) -> Base:
+    document = await db.scalar(
+        select(Document)
+        .where(
+            and_(Document.id == str(document_id), Document.organization_id == str(organization_id))
+        )
+        .limit(1)
+        .execution_options(populate_existing=True)
     )
     if document is None:
         raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu")
-    return record(document)
+    return document
 
 
 @router.get("", response_model=list[DocumentResponse])
 async def list_documents(
-    context: TenantContext = Depends(get_tenant_context), db: Any = Depends(get_mongo_db)
+    context: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     documents = (
-        await db.documents.find({"organization_id": str(context.organization.id)})
-        .sort("created_at", -1)
-        .to_list(None)
-    )
-    return [record(document) for document in documents]
+        await db.scalars(
+            select(Document)
+            .where(Document.organization_id == str(context.organization.id))
+            .order_by(Document.created_at.desc())
+            .execution_options(populate_existing=True)
+        )
+    ).all()
+    return [document for document in documents]
 
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -48,7 +59,7 @@ async def list_documents(
 async def upload_document(
     file: UploadFile = File(),
     context: TenantContext = Depends(get_tenant_context),
-    db: Any = Depends(get_mongo_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     original_name = Path(file.filename or "").name
     extension = Path(original_name).suffix.lower()
@@ -64,7 +75,7 @@ async def upload_document(
         raise HTTPException(status_code=415, detail=str(exc)) from exc
     finally:
         await file.close()
-    document = new_document(
+    document = make_record(
         organization_id=str(context.organization.id),
         original_name=original_name,
         storage_key=storage_key,
@@ -77,15 +88,15 @@ async def upload_document(
         approval_note=None,
         ai_review=None,
     )
-    await db.documents.insert_one(document)
-    return record(document)
+    document = await add_record(db, Document, document)
+    return document
 
 
 @router.get("/{document_id}/preview", response_model=DocumentPreview)
 async def preview_document(
     document_id: UUID,
     context: TenantContext = Depends(get_tenant_context),
-    db: Any = Depends(get_mongo_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     document = await owned_document(db, document_id, context.organization.id)
     content = document.extracted_text[:20_000] if document.extracted_text else None
@@ -101,32 +112,46 @@ async def preview_document(
 async def retry_document(
     document_id: UUID,
     context: TenantContext = Depends(get_tenant_context),
-    db: Any = Depends(get_mongo_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     document = await owned_document(db, document_id, context.organization.id)
+    await db.refresh(document, with_for_update=True)
     if document.status not in {DocumentStatus.FAILED.value, DocumentStatus.PROCESSING.value}:
         raise HTTPException(status_code=409, detail="Tài liệu không ở trạng thái có thể thử lại")
-    await db.documents.update_one(
-        {"_id": str(document.id)},
-        {
-            "$set": {
-                "status": DocumentStatus.UPLOADED.value,
-                "processing_error": None,
-                "updated_at": datetime.now(UTC),
+    if (
+        document.status == DocumentStatus.PROCESSING.value
+        and document.updated_at > datetime.now(UTC) - timedelta(minutes=15)
+    ):
+        raise HTTPException(status_code=409, detail="Tài liệu đang xử lý, vui lòng chờ hoàn tất")
+    await db.execute(
+        update(Document)
+        .where(Document.id == str(document.id))
+        .values(
+            **{
+                **{
+                    "status": DocumentStatus.UPLOADED.value,
+                    "processing_error": None,
+                    "updated_at": datetime.now(UTC),
+                }
             }
-        },
+        )
     )
-    return record(await db.documents.find_one({"_id": str(document.id)}))
+    return await db.scalar(
+        select(Document)
+        .where(Document.id == str(document.id))
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_document(
     document_id: UUID,
     context: TenantContext = Depends(get_tenant_context),
-    db: Any = Depends(get_mongo_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     document = await owned_document(db, document_id, context.organization.id)
-    await db.documents.delete_one({"_id": str(document.id)})
-    await db.document_chunks.delete_many({"document_id": str(document.id)})
-    await db.chatbot_documents.delete_many({"document_id": str(document.id)})
+    await db.execute(delete(Document).where(Document.id == str(document.id)))
+    await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == str(document.id)))
+    await db.execute(delete(ChatbotDocument).where(ChatbotDocument.document_id == str(document.id)))
     await to_thread.run_sync(safe_remove, settings.upload_dir / document.storage_key)

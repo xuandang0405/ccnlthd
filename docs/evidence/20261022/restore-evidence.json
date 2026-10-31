@@ -1,0 +1,139 @@
+{
+  "source_database": "ccnlthd_test_demo_20261022",
+  "target_database": "ccnlthd_test_restore_20261022",
+  "table_count": 32,
+  "all_row_counts_and_hashes_match": true,
+  "upload_files": 4,
+  "upload_hashes_match": true,
+  "tables": {
+    "alembic_version": {
+      "rows": 1,
+      "sha256": "0f913dc8b4f53dbfac63405c358a3865e9ba38d6df80b6e23b524dc95b9fffc9"
+    },
+    "audit_logs": {
+      "rows": 4,
+      "sha256": "8665654d0e6a451ceff145b8cfe50223c8e530ddd578a146c9057992ea44aee6"
+    },
+    "chat_requests": {
+      "rows": 7,
+      "sha256": "26dbb694f06c887f3ca0855a5087cf3ee6d7742c0450ab2342f4902bff74f60f"
+    },
+    "chatbot_documents": {
+      "rows": 2,
+      "sha256": "a22de2c7a004c3c875e741dbe9b3d7b4ff499d92169f1d3c05fb1174d2e36b74"
+    },
+    "chatbots": {
+      "rows": 2,
+      "sha256": "c3a958a15a882e753d895f2beeb3ace9e378bcab129474a4fc9f241a42510a16"
+    },
+    "conversations": {
+      "rows": 6,
+      "sha256": "f0bb9dfffccc74c2550d04d84dce4a724cfa0423f558992eee5f60f1bf647ff9"
+    },
+    "document_chunk_tokens": {
+      "rows": 117,
+      "sha256": "997ba1087557b6263c66c09a937cbafdbaa573eb350632b72673a319c7bf1fee"
+    },
+    "document_chunks": {
+      "rows": 3,
+      "sha256": "88caa19e13a8a55779a27a5b70ce069a89b691bba74fcb5f95fd90cf70ffd99a"
+    },
+    "documents": {
+      "rows": 3,
+      "sha256": "a8eed6f353528a04fcf389a97affc472cc6df8af605b2979fa135d67141c8f83"
+    },
+    "leads": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "messages": {
+      "rows": 14,
+      "sha256": "ff58b4ff3770562ba2727e801fbe0335e1e8f61a0ce530fdb9bdf6b4727b558a"
+    },
+    "notification_logs": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "organization_credits": {
+      "rows": 3,
+      "sha256": "23e6c3247c73d825e1dcb920833bfcc684c775ca57f242e756e728a6476a08c2"
+    },
+    "organization_limits": {
+      "rows": 3,
+      "sha256": "290b07ad56f2c465b07902746000e063d1011b8500bc18611e10f8269690d6f6"
+    },
+    "organization_members": {
+      "rows": 3,
+      "sha256": "5a3139c781f805697b4b8432fe42ada1603bcfccad171dccfb71a2a6caf94149"
+    },
+    "organizations": {
+      "rows": 3,
+      "sha256": "dabc43bb9cd1662b7a89af215f72cbc1834592126b45aa4d3ea19005c1c8708e"
+    },
+    "password_reset_tokens": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "payment_orders": {
+      "rows": 2,
+      "sha256": "a585aa74daa2fd71631dca120c935bd2785794fe9f1a9b9a718300897543d085"
+    },
+    "plans": {
+      "rows": 1,
+      "sha256": "6e083ebee6e0472c649624a08acc9f520c7fc782107e9e48cfc90d5dfba8ea2d"
+    },
+    "quota_logs": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "rate_limit_counters": {
+      "rows": 6,
+      "sha256": "ac627c3e2d3f2ce52e69f4aeeeff6fd9b45800383ce1c8cc1e2a74f83ee946e7"
+    },
+    "refresh_sessions": {
+      "rows": 14,
+      "sha256": "9e45795de3e34c88fa4f96a0ad9acd1bde582a97db142fdab9efbb90bff8f6e2"
+    },
+    "subscriptions": {
+      "rows": 3,
+      "sha256": "e6ccf44a6a147d165583330ec9bffe46828a0591361f97a01a5e21b3b5539902"
+    },
+    "support_ticket_attachments": {
+      "rows": 1,
+      "sha256": "244fc3febfe12375766bf7400baa919f97807c0950d2c4370e7bc352d7eeb4e7"
+    },
+    "support_ticket_messages": {
+      "rows": 3,
+      "sha256": "852618fee8ef85875c2a16c96969d72473d1683ad7e34d9ba40d9a3d2342a4e8"
+    },
+    "support_tickets": {
+      "rows": 1,
+      "sha256": "514c344637fadf370d83cb2db12fa1873a898c5c7687eabf2cea038aaf78b6db"
+    },
+    "system_settings": {
+      "rows": 1,
+      "sha256": "273e3574aadf1256725b990cee2eebabe49e6f9336d430113392385bab32ca9b"
+    },
+    "telegram_connections": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "transactions": {
+      "rows": 1,
+      "sha256": "29ffbf4bfad88ce0c6a256fd35dfc4e2015abe1bef479a0e5994fdbc4636054e"
+    },
+    "usage_logs": {
+      "rows": 7,
+      "sha256": "cf1d0bda235e6898c9a4994309476a394af638e5d7d5d27225363a6a333a07af"
+    },
+    "users": {
+      "rows": 3,
+      "sha256": "358344f91eaa52a0d66fec002760450e151c4c47030f97e444d2d3d520217214"
+    },
+    "visitor_sessions": {
+      "rows": 6,
+      "sha256": "e432f3a81905e534b5e334be85dde44d49fbebc78652e516f2aba231f9077a98"
+    }
+  },
+  "external_service_called": false
+}

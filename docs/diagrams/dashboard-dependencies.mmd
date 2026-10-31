@@ -1,0 +1,11 @@
+flowchart TD
+    endpoint["GET /api/v1/dashboard/summary"] --> tenant["Depends get_tenant_context"]
+    endpoint --> db["Depends get_db scope=function"]
+    tenant --> header["X-Organization-ID UUID"]
+    tenant --> user["Depends get_current_user"]
+    tenant --> db
+    user --> bearer["HTTPBearer Authorization"]
+    user --> db
+    db --> session["SQLAlchemy AsyncSession"]
+    session --> mysql["MySQL: user, refresh session, membership, organization"]
+    db --> cleanup["commit / rollback / close"]

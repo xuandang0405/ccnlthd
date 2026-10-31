@@ -1,22 +1,50 @@
-# Quy trình Tầng 2: kiểm thử và làm việc nhóm
+# Kiểm thử và giới hạn kiểm chứng
 
-## Chạy các kiểm tra
+Đợt mới ngày 22/10/2026: [retry chat, ranh giới transaction và giới hạn](CHAT_RETRY.md), [minh chứng](evidence/20261022/README.md).
+Đợt đầy đủ sau khi kiểm tra trình duyệt: MySQL đạt 126 test, không thất bại/bỏ qua; SQLite đạt 114, bỏ qua 12 test cần MySQL. Frontend đạt 26 test, TypeScript/lint/build đạt. Không cộng hai bộ test database thành 240 test chức năng khác nhau. Xem [nghiệm thu 22/10](ACCEPTANCE_20261022.md); mốc retry ban đầu trong cùng ngày có 120 test, trước khi bổ sung 6 test fallback.
 
-Backend: cài `pip install -e ".[dev]"` trong `backend`, chạy `ruff check app tests` và `pytest --cov=app`. Bộ test API/integration cần MongoDB replica set riêng; khi không đặt `TEST_MONGODB_URI`, chúng mặc định kết nối localhost. Fixture xóa `ai_sales_assistant_test` trước/sau mỗi test. **Không dùng URI Atlas production làm `TEST_MONGODB_URI`.** Nếu máy cá nhân không có MongoDB test, đẩy nhánh lên GitHub và xem job CI; không coi việc bỏ qua pytest là đã pass.
+Mốc lịch sử ngày 19/10/2026 có 91 test MySQL và 85 test SQLite, bỏ qua 6 test khóa đồng thời: [phạm vi sửa tại thời điểm đó](COMPLETION_20261019.md).
 
-Frontend: trong `frontend`, chạy `npm ci`, `npm run lint`, `npm test`, `npm run build`. Test hiện dùng Node test runner để kiểm tra luồng request: gửi token/tenant, hiển thị lỗi 422 và request ID, xử lý server trả HTML, upload FormData; đồng thời render component quota để kiểm tra cảnh báo và số dư. Chưa có browser E2E đầy đủ; cần bổ sung trước khi coi UI là đã kiểm chứng toàn diện.
+## Backend
 
-CI ở `.github/workflows/ci.yml` chạy khi push/PR: Python 3.12 với MongoDB replica set tạm, lint + pytest; Node 22 với lint + test + build. MongoDB trong GitHub Actions chỉ phục vụ CI; máy Windows chạy website không cần Docker.
+Trong backend, cài dev dependencies rồi chạy:
 
-## Đánh giá phần AI
+```powershell
+.\.venv\Scripts\python.exe -m ruff check app tests migrations
+.\.venv\Scripts\python.exe -m pytest --cov=app
+```
 
-`backend/tests/data/retrieval_cases.json` là bộ câu hỏi-sản phẩm nhỏ, có đáp án mong đợi. `test_retrieval_evaluation.py` kiểm tra truy xuất đúng sản phẩm đầu tiên và từ chối đánh dấu “đã tìm thấy” khi mã sản phẩm không có. Đây là **đánh giá tầng retrieval có dữ liệu giả lập**, không chứng minh Gemini trả lời đúng hay giá trên tài liệu khách hàng thật luôn chính xác. Khi có dữ liệu được phép sử dụng, nhóm cần bổ sung tập câu hỏi thực tế đã ẩn danh, đáp án/nguồn chuẩn, tỷ lệ trả lời đúng và tỷ lệ bịa thông tin; chạy lại sau mỗi thay đổi model/prompt/index.
+Mặc định test dùng SQLite tạm trong bộ nhớ. MySQL integration/concurrency test cần TEST_DATABASE_URL trỏ vào database riêng, ví dụ ccnlthd_test_local. Fixture tạo/xóa bảng trước và sau từng bài; không dùng database thật. Tên database được kiểm tra để từ chối ccnlthd.
 
-## Quy trình Git và review
+Các test MySQL đồng thời kiểm tra: giới hạn số chatbot, refresh rotation một lần, rate-limit dùng chung, trừ/hoàn lượt, phân bổ lượt và webhook không cộng trùng. SQLite không kiểm chứng được khóa FOR UPDATE nên nhóm concurrency được bỏ qua ở SQLite.
 
-1. Mỗi thay đổi tạo nhánh riêng từ `main`, commit mô tả mục đích và không chứa `.env`, token hoặc dữ liệu khách hàng.
-2. Mở PR/MR; mô tả mục tiêu, phạm vi, ảnh giao diện nếu có, kết quả lint/test/build, và rủi ro migration/cấu hình.
-3. Thành viên khác review code và thử luồng liên quan. Chỉ merge khi CI xanh và các ý kiến quan trọng đã xử lý.
-4. Trước deploy: backup MongoDB + uploads, xác minh cấu hình/domain, chạy health check, thử luồng user/admin/widget/thanh toán bằng tài khoản test, chuẩn bị phương án quay lại.
+## Frontend và CI
 
-Lịch sử commit hiện có không tự chứng minh review chéo. Giữ link PR, reviewer và kết quả CI làm minh chứng khi nộp báo cáo.
+Trong frontend: npm run lint, npm test, npm run build.
+
+.github/workflows/ci.yml chạy Python 3.12 với SQLite và service MySQL 8 tách biệt, kiểm tra Alembic, cùng Node 22 cho lint/test/build. Service Docker chỉ chạy trong CI, máy local không cần Docker. Chưa tuyên bố CI trên GitHub pass khi chưa xem kết quả lần chạy thực tế.
+
+Workflow hỗ trợ workflow_dispatch, xuất JUnit, coverage XML/HTML và lưu artifact
+14 ngày. Gate 80% chỉ áp dụng errors/observability/security; báo cáo độ phủ toàn
+app được xuất riêng, không che các phần chưa test. Kết quả ngày 14/10/2026 và
+bảng phủ yêu cầu có ở docs/FASTAPI_EVIDENCE.md.
+
+Không commit .coverage, coverage.xml, htmlcov hoặc file tạm vào root. Minh chứng
+đã kiểm tra và chọn lọc nằm dưới docs/evidence/20261014. CI thực tế chỉ được ghi
+đạt khi có link lần chạy đúng commit; local pytest không thay thế bằng chứng đó.
+
+## Thay đổi schema
+
+Nhập schema SQL hoặc alembic upgrade head vào database trống, rồi alembic check để so model với schema. Chỉ thử downgrade/upgrade trên database bỏ đi. Kiểm thử backup/restore vào database trống riêng và đối chiếu dữ liệu.
+
+## Luồng kiểm tra thủ công
+
+- Đăng ký, đăng nhập, hết hạn/refresh phiên.
+- User không được gọi API admin; không đọc dữ liệu tenant khác.
+- Upload PDF/DOCX/XLSX, xử lý và duyệt trước khi dùng trong chat.
+- Chat ghi lịch sử, trừ lượt; lỗi Gemini có fallback và hoàn lượt.
+- Thanh toán sai xác thực/sai số tiền không cấp lượt, webhook lặp không cộng lại.
+- Ticket, file đính kèm, thông báo chưa đọc và trả lời admin.
+- Đóng server, mở lại, kiểm tra phiên và job đang xử lý.
+
+Gemini/SePay thật cần kiểm tra riêng; test dùng giả lập tích hợp, không chuyển tiền hoặc gửi thông báo thật.

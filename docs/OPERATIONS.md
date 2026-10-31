@@ -3,7 +3,7 @@
 ## Hằng ngày
 
 - Kiểm tra `/health/ready`, dung lượng đĩa, RAM, CPU, trạng thái container và worker.
-- Xem lỗi có request ID: `docker compose logs --since 24h backend worker notification-worker caddy`.
+- Xem lỗi có request ID: `docker compose logs --since 24h backend worker caddy`.
 - Theo dõi payment `PENDING/REVIEW`, tài liệu `FAILED`, quota và chi phí Gemini.
 - Không in API key/token/raw dữ liệu khách hàng vào ticket hoặc log.
 

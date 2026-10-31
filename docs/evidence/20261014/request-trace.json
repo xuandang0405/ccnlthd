@@ -1,0 +1,102 @@
+[
+  {
+    "timestamp": "2026-10-14T04:26:06.849264+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-1",
+    "method": "GET",
+    "path": "/health/ready",
+    "status": 200,
+    "duration_ms": 25.42
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.203634+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-2",
+    "method": "GET",
+    "path": "/openapi.json",
+    "status": 200,
+    "duration_ms": 333.24
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.233794+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-3",
+    "method": "POST",
+    "path": "/api/v1/auth/login",
+    "status": 422,
+    "duration_ms": 1.39
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.249181+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-4",
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "status": 401,
+    "duration_ms": 0.88
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.343683+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-5",
+    "method": "POST",
+    "path": "/api/v1/auth/register",
+    "status": 409,
+    "duration_ms": 79.61
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.425955+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-6",
+    "method": "POST",
+    "path": "/api/v1/auth/login",
+    "status": 200,
+    "duration_ms": 68.69
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.439368+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-7",
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "status": 200,
+    "duration_ms": 12.32
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.448917+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-8",
+    "method": "GET",
+    "path": "/api/v1/admin/summary",
+    "status": 403,
+    "duration_ms": 8.56
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.482475+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-9",
+    "method": "GET",
+    "path": "/api/v1/dashboard/summary",
+    "status": 200,
+    "duration_ms": 32.48
+  },
+  {
+    "timestamp": "2026-10-14T04:26:07.484289+00:00",
+    "level": "INFO",
+    "event": "http_request",
+    "request_id": "acceptance-20261014-10",
+    "method": "GET",
+    "path": "/api/v1/no-such-route",
+    "status": 404,
+    "duration_ms": 0.81
+  }
+]

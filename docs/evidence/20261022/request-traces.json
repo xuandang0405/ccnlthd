@@ -1,0 +1,113 @@
+{
+  "scope": "isolated_demo_only",
+  "requests": [
+    {
+      "timestamp": "2026-10-22T04:46:59.717256+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "7a233771-e816-403e-96c3-ab16842f546b",
+      "method": "GET",
+      "path": "/api/v1/admin/summary",
+      "status": 403,
+      "duration_ms": 9.66
+    },
+    {
+      "timestamp": "2026-10-22T04:47:00.971584+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "77057aad-495f-409c-9782-d678d2facf76",
+      "method": "POST",
+      "path": "/api/v1/public/chat/2528c4ce-006a-44a4-9a86-595209332119/messages",
+      "status": 200,
+      "duration_ms": 344.02
+    },
+    {
+      "timestamp": "2026-10-22T04:47:05.709976+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "a47d10e3-fbd9-483c-be32-ad6f061abf76",
+      "method": "POST",
+      "path": "/api/v1/public/chat/2528c4ce-006a-44a4-9a86-595209332119/messages",
+      "status": 200,
+      "duration_ms": 242.39
+    },
+    {
+      "timestamp": "2026-10-22T04:47:14.158664+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "3ac95ba5-fd0e-4d9c-9dba-ff2868f4a603",
+      "method": "GET",
+      "path": "/api/v1/documents/e3f46dd8-372e-4b55-a87c-1b97556cea57/preview",
+      "status": 404,
+      "duration_ms": 9.37
+    },
+    {
+      "timestamp": "2026-10-22T04:47:15.336318+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "7cefbab4-42de-4f78-b647-adabb0a7a4c3",
+      "method": "POST",
+      "path": "/api/v1/public/chat/57e28854-a7b0-4141-bc31-2059ad1a8b60/messages",
+      "status": 200,
+      "duration_ms": 265.53
+    },
+    {
+      "timestamp": "2026-10-22T04:49:51.933616+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "785a00d5-fc01-4326-89d6-7c42ffb0f12f",
+      "method": "POST",
+      "path": "/api/v1/webhooks/sepay",
+      "status": 401,
+      "duration_ms": 1.91
+    },
+    {
+      "timestamp": "2026-10-22T04:49:51.936093+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "634ae610-96aa-4862-b0ba-42889e2e28b1",
+      "method": "POST",
+      "path": "/api/v1/webhooks/sepay",
+      "status": 401,
+      "duration_ms": 1.23
+    },
+    {
+      "timestamp": "2026-10-22T04:49:51.974684+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "36f382c6-434d-4905-8571-0b66ef7cd9fc",
+      "method": "POST",
+      "path": "/api/v1/webhooks/sepay",
+      "status": 200,
+      "duration_ms": 21.3
+    },
+    {
+      "timestamp": "2026-10-22T04:49:52.005167+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "019f4776-c762-453d-85a0-84790e2974ec",
+      "method": "POST",
+      "path": "/api/v1/webhooks/sepay",
+      "status": 200,
+      "duration_ms": 10.93
+    },
+    {
+      "timestamp": "2026-10-22T04:57:49.343670+00:00",
+      "level": "INFO",
+      "event": "http_request",
+      "request_id": "6ca1ea13-0c06-42ba-a054-2045589a3755",
+      "method": "POST",
+      "path": "/api/v1/public/chat/2528c4ce-006a-44a4-9a86-595209332119/messages",
+      "status": 200,
+      "duration_ms": 332.6
+    }
+  ],
+  "gemini_http_log": [
+    "2026-10-22 11:47:00,934 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent \"HTTP/1.1 401 Unauthorized\"",
+    "2026-10-22 11:47:05,688 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent \"HTTP/1.1 401 Unauthorized\"",
+    "2026-10-22 11:47:15,301 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent \"HTTP/1.1 401 Unauthorized\"",
+    "2026-10-22 11:49:38,672 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent \"HTTP/1.1 401 Unauthorized\"",
+    "2026-10-22 11:49:39,201 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent \"HTTP/1.1 401 Unauthorized\"",
+    "2026-10-22 11:57:49,291 INFO httpx HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent \"HTTP/1.1 401 Unauthorized\""
+  ]
+}

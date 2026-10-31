@@ -166,9 +166,7 @@ def _xlsx_sheet_lines(sheet: object, max_cells: int, cells_seen: int) -> tuple[l
 
     for row_number, values in buffered[:header_position]:
         preamble = [
-            _excel_value(value)
-            for value in values
-            if value is not None and str(value).strip()
+            _excel_value(value) for value in values if value is not None and str(value).strip()
         ]
         if preamble:
             lines.append(f"[Dòng {row_number}] " + " | ".join(preamble))
@@ -181,9 +179,7 @@ def _xlsx_sheet_lines(sheet: object, max_cells: int, cells_seen: int) -> tuple[l
             header = headers[index] if index < len(headers) else f"Cột {index + 1}"
             fields.append(f"{header}: {_excel_value(value)}")
         if fields:
-            lines.append(
-                f"[Trang tính: {sheet.title} | Dòng {row_number}] " + " | ".join(fields)
-            )
+            lines.append(f"[Trang tính: {sheet.title} | Dòng {row_number}] " + " | ".join(fields))
 
     for row_number, values in buffered[header_position + 1 :]:
         append_data_row(row_number, values)

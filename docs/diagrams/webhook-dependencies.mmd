@@ -1,0 +1,9 @@
+flowchart TD
+    endpoint["POST /api/v1/webhooks/sepay"] --> payload["SePayWebhookPayload Pydantic"]
+    endpoint --> headers["Authorization / X-SePay-Signature / X-SePay-Timestamp"]
+    endpoint --> config["Depends get_settings"]
+    config --> settings["pydantic-settings; instance cached with lru_cache"]
+    endpoint --> db["Depends get_db scope=function"]
+    endpoint --> auth["authenticate_sepay with the injected Settings"]
+    auth --> verify["API_KEY or HMAC; no auth bypass"]
+    db --> session["AsyncSession; payment transaction and row locks"]

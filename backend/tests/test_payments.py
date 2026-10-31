@@ -5,9 +5,11 @@ import time
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import SecretStr
+from sqlalchemy import func, select, true
 
 from app.core.config import get_settings
-from app.core.mongodb import get_mongo_database
+from app.models.entities import Transaction
+from tests.conftest import get_test_database
 from tests.test_auth_and_tenants import register
 
 
@@ -64,8 +66,8 @@ async def test_sepay_webhook_is_authenticated_idempotent_and_grants_credits(clie
     status_response = await client.get(f"/api/v1/payments/orders/{order['id']}", headers=headers)
     assert status_response.json()["status"] == "SUCCESS"
 
-    db = get_mongo_database()
-    assert await db.transactions.count_documents({}) == 1
+    db = get_test_database()
+    assert await db.scalar(select(func.count()).select_from(Transaction).where(true())) == 1
     balance = await client.get("/api/v1/payments/balance", headers=headers)
     assert balance.status_code == 200
     assert balance.json()["free_remaining"] == 20

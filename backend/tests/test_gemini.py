@@ -4,6 +4,8 @@ from google.genai import errors
 
 from app.integrations.gemini import GeminiConfigurationError, GeminiService, GeminiServiceError
 
+pytestmark = pytest.mark.no_db
+
 
 class FakeModels:
     def __init__(self, failures: int):
@@ -31,12 +33,14 @@ class FakeClient:
         return None
 
 
-async def test_gemini_fails_clearly_without_credentials():
+async def test_gemini_fails_clearly_without_credentials(caplog):
     service = GeminiService()
     service._api_key = None
     service._model = None
-    with pytest.raises(GeminiConfigurationError, match="GEMINI_API_KEY"):
+    with pytest.raises(GeminiConfigurationError, match="chưa sẵn sàng") as failure:
         await service.generate(question="Giá sản phẩm A?", context="", tone="professional")
+    assert "gemini" not in str(failure.value).casefold()
+    assert "GEMINI_API_KEY" in caplog.text
 
 
 async def test_gemini_retries_transient_failures(monkeypatch):
@@ -68,8 +72,9 @@ async def test_gemini_stops_after_four_transient_failures(monkeypatch):
     service._api_key = "configured"
     service._model = "gemini-3.1-flash-lite"
 
-    with pytest.raises(GeminiServiceError, match="tạm quá tải"):
+    with pytest.raises(GeminiServiceError, match="Hệ thống") as failure:
         await service.generate(question="Giá sản phẩm A?", context="", tone="professional")
+    assert "gemini" not in str(failure.value).casefold()
     assert client.aio.models.calls == 4
 
 
@@ -115,3 +120,45 @@ async def test_gemini_retries_network_errors(monkeypatch):
 
     assert response == "Phản hồi sau lỗi mạng"
     assert network_client.aio.models.calls == 2
+
+
+@pytest.mark.parametrize("operation", ["generate", "review_document"])
+@pytest.mark.parametrize("status", [401, 403, 404])
+async def test_provider_api_errors_are_not_disclosed(monkeypatch, operation, status):
+    client = FakeClient(failures=0)
+
+    async def unavailable(**_kwargs):
+        raise errors.ClientError(status, {"error": {"message": "provider-specific detail"}})
+
+    client.aio.models.generate_content = unavailable
+    monkeypatch.setattr("app.integrations.gemini.genai.Client", lambda **_kwargs: client)
+    service = GeminiService()
+    service._api_key = "configured"
+    service._model = "test-model"
+    with pytest.raises(GeminiServiceError) as failure:
+        if operation == "generate":
+            await service.generate(question="Giá?", context="", tone="professional")
+        else:
+            await service.review_document("Tài liệu kiểm tra")
+    assert "gemini" not in str(failure.value).casefold()
+    assert "provider-specific detail" not in str(failure.value)
+
+
+@pytest.mark.parametrize("operation", ["generate", "review_document"])
+async def test_empty_provider_response_is_not_disclosed(monkeypatch, operation):
+    client = FakeClient(failures=0)
+
+    async def empty_response(**_kwargs):
+        return type("Response", (), {"text": ""})()
+
+    client.aio.models.generate_content = empty_response
+    monkeypatch.setattr("app.integrations.gemini.genai.Client", lambda **_kwargs: client)
+    service = GeminiService()
+    service._api_key = "configured"
+    service._model = "test-model"
+    with pytest.raises(GeminiServiceError) as failure:
+        if operation == "generate":
+            await service.generate(question="Giá?", context="", tone="professional")
+        else:
+            await service.review_document("Tài liệu kiểm tra")
+    assert "gemini" not in str(failure.value).casefold()

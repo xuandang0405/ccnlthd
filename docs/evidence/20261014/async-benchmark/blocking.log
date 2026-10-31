@@ -1,0 +1,61 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: D:\QUAN TRỌNG\CCNLTHD\source\backend\benchmarks\async_load.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 10 max VUs, 10m30s max duration (incl. graceful stop):
+              * default: 100 iterations shared among 10 VUs (maxDuration: 10m0s, gracefulStop: 30s)
+
+
+running (00m01.0s), 10/10 VUs, 30 complete and 0 interrupted iterations
+default   [  30% ] 10 VUs  00m01.0s/10m0s  030/100 shared iters
+
+running (00m02.0s), 10/10 VUs, 60 complete and 0 interrupted iterations
+default   [  60% ] 10 VUs  00m02.0s/10m0s  060/100 shared iters
+
+running (00m03.0s), 05/10 VUs, 95 complete and 0 interrupted iterations
+default   [  95% ] 10 VUs  00m03.0s/10m0s  095/100 shared iters
+
+
+  █ THRESHOLDS 
+
+    http_req_failed
+    ✓ 'rate==0' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 100     31.807673/s
+    checks_succeeded...: 100.00% 100 out of 100
+    checks_failed......: 0.00%   0 out of 100
+
+    ✓ status 200
+
+    HTTP
+    http_req_duration..............: avg=304.15ms min=63.88ms med=313.1ms  max=534.28ms p(90)=316.98ms p(95)=317.06ms
+      { expected_response:true }...: avg=304.15ms min=63.88ms med=313.1ms  max=534.28ms p(90)=316.98ms p(95)=317.06ms
+    http_req_failed................: 0.00%  0 out of 100
+    http_reqs......................: 100    31.807673/s
+
+    EXECUTION
+    iteration_duration.............: avg=304.66ms min=67.11ms med=313.82ms max=537.31ms p(90)=317.06ms p(95)=317.28ms
+    iterations.....................: 100    31.807673/s
+    vus............................: 5      min=5        max=10
+    vus_max........................: 10     min=10       max=10
+
+    NETWORK
+    data_received..................: 16 kB  5.2 kB/s
+    data_sent......................: 7.9 kB 2.5 kB/s
+
+
+
+
+running (00m03.1s), 00/10 VUs, 100 complete and 0 interrupted iterations
+default ✓ [ 100% ] 10 VUs  00m03.1s/10m0s  100/100 shared iters

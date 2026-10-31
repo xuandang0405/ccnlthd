@@ -1,0 +1,671 @@
+{
+  "started_at": "2026-10-26T15:44:44.344Z",
+  "database": "ccnlthd_test_20261026_e2e",
+  "requests": [
+    {
+      "path": "/auth/register",
+      "method": "POST",
+      "status": 201,
+      "request_id": "ab1f0e6e-b519-4fa8-9cf6-d6166de5b4a5"
+    },
+    {
+      "path": "/auth/me",
+      "method": "GET",
+      "status": 200,
+      "request_id": "f1dc548c-bbd0-4a10-ab50-51aeab3e7ac8"
+    },
+    {
+      "path": "/auth/register",
+      "method": "POST",
+      "status": 201,
+      "request_id": "61a092c1-e17b-4628-87b4-e111f59c7875"
+    },
+    {
+      "path": "/auth/me",
+      "method": "GET",
+      "status": 200,
+      "request_id": "99c84420-8621-4ae7-bc68-f384ddbec871"
+    },
+    {
+      "path": "/auth/register",
+      "method": "POST",
+      "status": 201,
+      "request_id": "5ffcd0cb-55e3-41e2-b7ec-73ff90cea8cc"
+    },
+    {
+      "path": "/auth/me",
+      "method": "GET",
+      "status": 200,
+      "request_id": "56b304c9-2392-4a75-b884-28ad8f73097b"
+    },
+    {
+      "path": "/chatbots",
+      "method": "POST",
+      "status": 201,
+      "request_id": "6ef00649-b42c-4668-8262-a99461c1861e"
+    },
+    {
+      "path": "/chatbots",
+      "method": "POST",
+      "status": 201,
+      "request_id": "a0b23bfe-f51e-4462-950a-0d3d8b8e357f"
+    },
+    {
+      "path": "/documents",
+      "method": "POST",
+      "status": 202,
+      "request_id": "4986302a-8ec4-499c-af3c-9d2ce4cc2622",
+      "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c"
+    },
+    {
+      "path": "/documents",
+      "method": "POST",
+      "status": 202,
+      "request_id": "b91da2c1-6178-4599-9132-ecf528a58937",
+      "document_id": "94a35416-0836-4a65-a758-27c75240d3a9"
+    },
+    {
+      "path": "/documents",
+      "method": "POST",
+      "status": 202,
+      "request_id": "ecec0eb9-41ab-4777-8455-89e35f690786",
+      "document_id": "7784cf8b-3d00-4448-9dbe-75ca950be59d"
+    },
+    {
+      "path": "/admin/documents/ce8cc8fc-5611-43d0-a07f-4021893f5f2c/approval",
+      "method": "PATCH",
+      "status": 409,
+      "request_id": "d7c87696-ecbf-4f0a-91bd-e50cf6150a08"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "5dd55f7b-d882-422b-aa7c-89a6026daefa"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "5382b8e6-9512-40ce-aeeb-108056f7d48b"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "bdb1e29f-714f-47fe-8269-d25cf178c993"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "3ee68bd3-5a40-4fa9-864f-042e7ca45b1a"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "6807378b-08b3-45b5-86cd-5c648fb4f105"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "8b62908b-c315-4966-a8fe-fcddc589f133"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "42f51492-8501-46c6-8570-a81dcfdc8754"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "27300593-307e-47b9-a35a-42f984927228"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "b1fe08df-7d1e-476d-b526-9794873f9d6a"
+    },
+    {
+      "path": "/admin/documents/ce8cc8fc-5611-43d0-a07f-4021893f5f2c/approval",
+      "method": "PATCH",
+      "status": 200,
+      "request_id": "68ec096d-2cf6-47e3-9793-b8ebc179d69c"
+    },
+    {
+      "path": "/admin/documents/7784cf8b-3d00-4448-9dbe-75ca950be59d/approval",
+      "method": "PATCH",
+      "status": 200,
+      "request_id": "28e2b406-9d33-494a-99bf-b25afd77b013"
+    },
+    {
+      "path": "/admin/documents/94a35416-0836-4a65-a758-27c75240d3a9/approval",
+      "method": "PATCH",
+      "status": 200,
+      "request_id": "2fbc2b12-38e6-4782-a378-258ce0d82afe"
+    },
+    {
+      "path": "/admin/documents/94a35416-0836-4a65-a758-27c75240d3a9/approval",
+      "method": "PATCH",
+      "status": 200,
+      "request_id": "b2e13df2-72c4-4a6e-88f1-cbc7f5a7a0c2"
+    },
+    {
+      "path": "/public/chat/a99fc28e-cc05-4530-bb4d-22c7fc662cf0/messages",
+      "method": "POST",
+      "status": 200,
+      "request_id": "5fc0f702-f253-4803-9013-ff2a44cee07e"
+    },
+    {
+      "path": "/documents/ce8cc8fc-5611-43d0-a07f-4021893f5f2c/preview",
+      "method": "GET",
+      "status": 404,
+      "request_id": "396ce29d-1689-4f7d-abfe-0cf7435145a8"
+    },
+    {
+      "path": "/documents/ce8cc8fc-5611-43d0-a07f-4021893f5f2c/retry",
+      "method": "POST",
+      "status": 404,
+      "request_id": "8bb11959-a275-492a-8e20-379e084e6321"
+    },
+    {
+      "path": "/public/chat/afdbdb90-2f53-4676-97bf-0a3689ca2d4c/messages",
+      "method": "POST",
+      "status": 401,
+      "request_id": "05179691-0070-4803-a7f0-22695582c6fa"
+    },
+    {
+      "path": "/public/chat/a99fc28e-cc05-4530-bb4d-22c7fc662cf0/sessions",
+      "method": "POST",
+      "status": 201,
+      "request_id": "12cf0b96-4eb6-4fa3-9081-20905065f3bd"
+    },
+    {
+      "path": "/public/chat/a99fc28e-cc05-4530-bb4d-22c7fc662cf0/messages",
+      "method": "POST",
+      "status": 429,
+      "request_id": "667c696c-a721-4a78-b457-de19aac2fe96"
+    },
+    {
+      "path": "/leads/ebf9777f-5381-4adf-82aa-ea14ce9d79fc",
+      "method": "PATCH",
+      "status": 404,
+      "request_id": "a99ec7bb-58a2-41e1-ad71-befd9d220665"
+    },
+    {
+      "path": "/dashboard/summary",
+      "method": "GET",
+      "status": 200,
+      "request_id": "3202fd0e-b9f4-4dd4-863e-50066fdb0afa"
+    },
+    {
+      "path": "/documents",
+      "method": "POST",
+      "status": 202,
+      "request_id": "dcf0088a-526a-4599-9adf-2b9d01d209cf",
+      "document_id": "b68af153-791f-4653-8875-ba086bcd1386"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "5557acce-f288-4b9b-8493-6b7b9096af63"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "ad1083ab-3ea7-49d7-bce0-6316c79892f3"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "91a48d80-13da-4240-a42c-4f5b00120328"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "f234593a-f2bf-45ec-bbfa-fd44e96f9585"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "6e8aa863-c401-408b-9e41-afec532e4e9b"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "06a14432-9b0a-483e-80f5-1816a54bdaaa"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "ca58678a-118a-42d4-bd38-e4396103fd5c"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "d26d5802-e5ad-478f-a0cc-12eb4d596af7"
+    },
+    {
+      "path": "/documents/b68af153-791f-4653-8875-ba086bcd1386/retry",
+      "method": "POST",
+      "status": 200,
+      "request_id": "1e99e853-097b-45cc-a9c6-8d591117e3ac"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "224efa1d-8e6d-462d-8e80-55b63249a01f"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "629bf4f5-66b8-4751-b421-f1437b981dad"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "1d6ad258-89f3-462e-9e73-48016b058abf"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "28279545-d7cf-4a5d-9550-545f148511de"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "c43e02b6-c2eb-40d5-b3d4-d66554ebea74"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "e76f2221-9d49-4152-9a67-c56b4b55b56b"
+    }
+  ],
+  "cases": [
+    {
+      "id": "01-pending",
+      "question": "Laptop Alpha PRIV37 có giá bao nhiêu và bảo hành thế nào?",
+      "status": 200,
+      "request_id": "daf73533-d1bf-49d4-bebd-d1a93c94ff0b",
+      "elapsed_ms": 21971,
+      "client_message_id": "e93551fa-828c-4e7c-9a73-12061e728858",
+      "before": {
+        "bot": 0,
+        "free": 20,
+        "used": 0,
+        "purchased": 0
+      },
+      "after": {
+        "bot": 0,
+        "free": 20,
+        "used": 0,
+        "purchased": 0
+      },
+      "reply": "Hiện tại website chưa có sản phẩm bạn đang tìm hoặc dữ liệu chưa được cập nhật.\n\n- **Laptop Acer Aspire 7 A715**\n  + **Giá: 19.890.000 VNĐ**\n  + Bảo hành: 24 tháng\n- **Laptop Lenovo IdeaPad Slim 3**\n  + **Giá: 18.990.000 VNĐ**\n  + Bảo hành: 12 tháng\n\n*Hệ thống đang gặp sự cố khi xử lý dữ liệu. Vui lòng thử lại sau ít phút.*",
+      "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+      "remaining_daily": 20,
+      "remaining_credits": 20,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "screenshot": "screenshots/01-pending.png"
+    },
+    {
+      "id": "02-approved",
+      "question": "Laptop Alpha PRIV37 có giá bao nhiêu và bảo hành thế nào?",
+      "status": 200,
+      "request_id": "680b6788-4991-4307-8665-6648ee5a5e2f",
+      "elapsed_ms": 4818,
+      "client_message_id": "25ab8ceb-4556-481e-b9a4-c7863293dd3c",
+      "before": {
+        "bot": 0,
+        "free": 20,
+        "used": 0,
+        "purchased": 0
+      },
+      "after": {
+        "bot": 0,
+        "free": 19,
+        "used": 1,
+        "purchased": 0
+      },
+      "reply": "**Laptop Alpha PRIV37** hiện có giá là **14.321.987 VNĐ** với chính sách bảo hành lên đến **37 tháng**.\n\nBạn có cần thêm thông tin chi tiết về cấu hình của mẫu máy này không?",
+      "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+      "remaining_daily": 19,
+      "remaining_credits": 19,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "94a35416-0836-4a65-a758-27c75240d3a9",
+          "document_name": "restricted-alpha.xlsx"
+        },
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "screenshot": "screenshots/02-approved.png"
+    },
+    {
+      "id": "03-revoked-same-session",
+      "question": "Laptop Alpha PRIV37 có giá bao nhiêu và bảo hành thế nào?",
+      "status": 200,
+      "request_id": "3a657599-da4b-466b-aeda-d05c8e66f050",
+      "elapsed_ms": 14443,
+      "client_message_id": "6efe883e-585f-467c-a217-cca910dfb202",
+      "before": {
+        "bot": 0,
+        "free": 19,
+        "used": 1,
+        "purchased": 0
+      },
+      "after": {
+        "bot": 0,
+        "free": 18,
+        "used": 2,
+        "purchased": 0
+      },
+      "reply": "Hiện tại, website chưa có thông tin về mẫu **Laptop Alpha PRIV37** mà bạn đang tìm kiếm.\n\nNếu bạn đang quan tâm đến các dòng laptop văn phòng hoặc học tập, bạn có thể tham khảo hai sản phẩm hiện có sẵn tại cửa hàng:\n\n* **Laptop Acer Aspire 7 A715**: **19.890.000 VNĐ**, bảo hành **24 tháng**.\n* **Laptop Lenovo IdeaPad Slim 3**: **18.990.000 VNĐ**, bảo hành **12 tháng**.\n\nKhông biết bạn đang ưu tiên tìm máy cho nhu cầu công việc cụ thể nào hay có mức ngân sách dự kiến ra sao không ạ?",
+      "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+      "remaining_daily": 18,
+      "remaining_credits": 18,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "screenshot": "screenshots/03-revoked-same-session.png"
+    },
+    {
+      "id": "04-other-tenant",
+      "question": "Laptop Beta BETA49 có giá bao nhiêu và bảo hành thế nào?",
+      "status": 200,
+      "request_id": "518cf7f7-abc6-4d50-b9f2-50f811d50266",
+      "elapsed_ms": 23484,
+      "client_message_id": "5c1d4a80-75e3-42f3-9e0f-194934e46874",
+      "before": {
+        "bot": 0,
+        "free": 18,
+        "used": 2,
+        "purchased": 0
+      },
+      "after": {
+        "bot": 0,
+        "free": 18,
+        "used": 2,
+        "purchased": 0
+      },
+      "reply": "Hiện tại website chưa có sản phẩm bạn đang tìm hoặc dữ liệu chưa được cập nhật.\n\n- **Laptop Acer Aspire 7 A715**\n  + **Giá: 19.890.000 VNĐ**\n  + Bảo hành: 24 tháng\n- **Laptop Lenovo IdeaPad Slim 3**\n  + **Giá: 18.990.000 VNĐ**\n  + Bảo hành: 12 tháng\n\n*Hệ thống đang gặp sự cố khi xử lý dữ liệu. Vui lòng thử lại sau ít phút.*",
+      "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+      "remaining_daily": 18,
+      "remaining_credits": 18,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "screenshot": "screenshots/04-other-tenant.png"
+    },
+    {
+      "id": "05-ui06-budget",
+      "question": "Mình có ngân sách tối đa 19 triệu, Laptop Acer Aspire 7 A715 giá và bảo hành thế nào, có phù hợp không?",
+      "status": 200,
+      "request_id": "7acedb08-6dae-48e1-bbb8-86ac4aa7d912",
+      "elapsed_ms": 32973,
+      "client_message_id": "019f420c-bf7a-4a65-97e7-8623fa709847",
+      "before": {
+        "bot": 0,
+        "free": 18,
+        "used": 2,
+        "purchased": 0
+      },
+      "after": {
+        "bot": 0,
+        "free": 18,
+        "used": 2,
+        "purchased": 0
+      },
+      "reply": "Các mẫu không vượt ngân sách **19.000.000 VNĐ** trong dữ liệu truy xuất:\n\n- **Laptop Lenovo IdeaPad Slim 3**\n  + **Giá: 18.990.000 VNĐ**\n  + Bảo hành: 12 tháng\n\n*Hệ thống đang gặp sự cố khi xử lý dữ liệu. Vui lòng thử lại sau ít phút.*",
+      "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+      "remaining_daily": 18,
+      "remaining_credits": 18,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": false,
+      "screenshot": "screenshots/05-ui06-budget.png"
+    },
+    {
+      "id": "06-within-budget",
+      "question": "Tư vấn laptop ngân sách 19 triệu, chỉ chọn mẫu không vượt ngân sách và nói rõ giá, bảo hành.",
+      "status": 200,
+      "request_id": "3d9ac4e9-8378-4f7e-ab77-c448e39cbb0d",
+      "elapsed_ms": 18718,
+      "client_message_id": "0d1bd797-ded4-4d0d-835a-38c57a99bcbb",
+      "before": {
+        "bot": 0,
+        "free": 18,
+        "used": 2,
+        "purchased": 0
+      },
+      "after": {
+        "bot": 0,
+        "free": 17,
+        "used": 3,
+        "purchased": 0
+      },
+      "reply": "Hiện tại, với ngân sách tối đa 19.000.000 VNĐ, tôi xin gợi ý mẫu laptop phù hợp nhất trong hệ thống như sau:\n\n* **Laptop Lenovo IdeaPad Slim 3**: **18.990.000 VNĐ**, bảo hành **12 tháng**.\n\nĐối với mẫu **Laptop Acer Aspire 7 A715**, sản phẩm này có giá **19.890.000 VNĐ**, hiện đang vượt ngân sách của bạn 890.000 VNĐ nên tôi không đưa vào danh sách lựa chọn phù hợp.\n\nBạn có muốn tôi kiểm tra thêm thông tin chi tiết về cấu hình của chiếc Lenovo IdeaPad Slim 3 này không?",
+      "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+      "remaining_daily": 17,
+      "remaining_credits": 17,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "screenshot": "screenshots/06-within-budget.png"
+    },
+    {
+      "id": "07-no-affordable-product",
+      "question": "Chỉ có 10 triệu mua laptop, không tăng ngân sách, có lựa chọn nào phù hợp không?",
+      "status": 200,
+      "request_id": "81c191a0-5a70-4c65-9c8a-9e0f2ed68945",
+      "elapsed_ms": 6660,
+      "client_message_id": "91a3b7f0-b533-46b3-b176-951ccdda5e7c",
+      "before": {
+        "bot": 0,
+        "free": 17,
+        "used": 3,
+        "purchased": 0
+      },
+      "after": {
+        "bot": 0,
+        "free": 16,
+        "used": 4,
+        "purchased": 0
+      },
+      "reply": "Hiện tại, website chưa có mẫu laptop nào đáp ứng được mức ngân sách tối đa 10.000.000 VNĐ của bạn. Các sản phẩm hiện có đều vượt ngân sách:\n\n* **Laptop Acer Aspire 7 A715**: **19.890.000 VNĐ** (vượt ngân sách 9.890.000 VNĐ)\n* **Laptop Lenovo IdeaPad Slim 3**: **18.990.000 VNĐ** (vượt ngân sách 8.990.000 VNĐ)\n\nBạn có muốn mình hỗ trợ tìm kiếm các dòng máy cũ hoặc chờ đợi các đợt giảm giá sâu hơn không?",
+      "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+      "remaining_daily": 16,
+      "remaining_credits": 16,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "screenshot": "screenshots/07-no-affordable-product.png"
+    },
+    {
+      "id": "10-after-real-window-expiry",
+      "question": "Laptop Lenovo IdeaPad Slim 3 giá bao nhiêu và bảo hành thế nào?",
+      "status": 200,
+      "request_id": "222324f8-7c6d-48a5-a1e3-cbbe1ad7efc1",
+      "elapsed_ms": 12918,
+      "client_message_id": "31bb64c3-675e-4971-9e80-8748e17f96c7",
+      "before": {
+        "bot": 0,
+        "free": 16,
+        "used": 4,
+        "purchased": 0
+      },
+      "after": {
+        "bot": 0,
+        "free": 15,
+        "used": 5,
+        "purchased": 0
+      },
+      "reply": "**Laptop Lenovo IdeaPad Slim 3** hiện có giá là **18.990.000 VNĐ** với chính sách **bảo hành 12 tháng**.\n\nBạn có cần thêm thông tin chi tiết về cấu hình của mẫu máy này không?",
+      "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+      "remaining_daily": 15,
+      "remaining_credits": 15,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "screenshot": "screenshots/10-after-real-window-expiry.png"
+    }
+  ],
+  "checks": [
+    {
+      "name": "worker_done_does_not_approve",
+      "passed": true
+    },
+    {
+      "name": "replay_does_not_charge_again",
+      "passed": true
+    },
+    {
+      "name": "forged_origin_is_not_authentication",
+      "passed": true,
+      "public_session_status": 201,
+      "private_document_status": 404,
+      "cross_bot_token_status": 401
+    },
+    {
+      "name": "rate_429_keeps_wallet_unchanged",
+      "passed": true
+    },
+    {
+      "name": "lead_restart_and_tenant_isolation",
+      "passed": true
+    },
+    {
+      "name": "lead_contacted_retained",
+      "passed": true
+    },
+    {
+      "name": "real_worker_failure_retry_requires_approval",
+      "passed": true
+    },
+    {
+      "name": "real_60s_window_expires_across_restart",
+      "passed": true
+    }
+  ],
+  "documents": {
+    "catalog": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+    "restricted": "94a35416-0836-4a65-a758-27c75240d3a9",
+    "beta": "7784cf8b-3d00-4448-9dbe-75ca950be59d"
+  },
+  "bot": {
+    "id": "561b5cea-b259-4ec7-a5c0-0f6d31cb4148",
+    "public_id": "a99fc28e-cc05-4530-bb4d-22c7fc662cf0",
+    "organization_id": "da7a09d1-68c7-4390-b804-3e218394b04c"
+  },
+  "conversation_id": "308cddb4-a32f-4d8e-ab7e-2415f27cb865",
+  "rate_window": {
+    "start_utc": "2026-10-26T15:46:55.448Z",
+    "counter_before": {
+      "used": 30,
+      "db_now_utc": "2026-10-26 15:46:55.688033",
+      "expires_at_utc": "2026-10-26 15:47:55.437250"
+    },
+    "before": {
+      "bot": 0,
+      "free": 16,
+      "used": 4,
+      "purchased": 0
+    },
+    "counter_after_rejection": {
+      "used": 31,
+      "expires_at_utc": "2026-10-26 15:47:55.437250"
+    },
+    "end_utc": "2026-10-26T15:47:56.455Z",
+    "counter_after_expiry": {
+      "used": 1,
+      "db_now_utc": "2026-10-26 15:48:09.874277",
+      "expires_at_utc": "2026-10-26 15:48:56.659510"
+    }
+  },
+  "lead": {
+    "id": "ebf9777f-5381-4adf-82aa-ea14ce9d79fc",
+    "request_id": "ca25ac1a-bfce-432f-a06c-685bf5f8c0d5",
+    "source": "real widget form",
+    "poll_observed_ms": 15166
+  },
+  "worker": {
+    "document_id": "b68af153-791f-4653-8875-ba086bcd1386",
+    "failed_status": "FAILED",
+    "error_type": "FileNotFoundError",
+    "final_status": "DONE",
+    "approval_status": "PENDING",
+    "chunk_count": 1,
+    "chatbot_links": 0
+  },
+  "final_balances": {
+    "bot": 0,
+    "free": 15,
+    "used": 5,
+    "purchased": 0
+  },
+  "schema_revision": "20261022_chat_retry",
+  "checks_passed": true,
+  "semantic_passed": false,
+  "finished_at": "2026-10-26T15:48:10.154Z"
+}

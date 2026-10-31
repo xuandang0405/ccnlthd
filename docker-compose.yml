@@ -1,70 +1,92 @@
+name: ${COMPOSE_PROJECT_NAME:-trolyviet}
+
+x-logging: &default-logging
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+
+x-backend: &backend-service
+  image: trolyviet-backend:local
+  build: ./backend
+  env_file: ${DOCKER_ENV_FILE:-.env.docker}
+  environment:
+    DATABASE_BACKEND: sql
+    DATABASE_URL: mysql+aiomysql://${MYSQL_USER:-ccnlthd_app}:${MYSQL_PASSWORD:?Chay deployment/setup-docker.ps1 truoc}@mysql:3306/${MYSQL_DATABASE:-ccnlthd}?charset=utf8mb4
+    RATE_LIMIT_BACKEND: sql
+    UPLOAD_DIR: /data/uploads
+    APP_PUBLIC_URL: ${APP_PUBLIC_URL:-http://127.0.0.1:8080}
+    FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://127.0.0.1:8080}
+    APP_DOMAIN: ${APP_DOMAIN:-localhost}
+  volumes:
+    - uploads:/data/uploads
+  restart: "no"
+  init: true
+  stop_grace_period: 30s
+  logging: *default-logging
+  networks: [internal]
+
 services:
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+  mysql:
+    image: mysql:8.4
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-ccnlthd}
+      MYSQL_USER: ${MYSQL_USER:-ccnlthd_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Thieu MYSQL_PASSWORD trong .env.docker}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Thieu MYSQL_ROOT_PASSWORD trong .env.docker}
     volumes:
-      - redis_data:/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      # Kiểm tra bằng tài khoản app qua TCP, không chỉ ping mysqld.
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql -h 127.0.0.1 -u \"$$MYSQL_USER\" -D \"$$MYSQL_DATABASE\" -e 'SELECT 1' >/dev/null 2>&1"]
+      interval: 5s
       timeout: 5s
-      retries: 5
-    restart: unless-stopped
-    logging: &default-logging
-      driver: json-file
-      options: {max-size: "10m", max-file: "3"}
+      retries: 30
+      start_period: 30s
+    restart: "no"
+    stop_grace_period: 30s
+    logging: *default-logging
     networks: [internal]
+
+  migrate:
+    <<: *backend-service
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      mysql: {condition: service_healthy}
 
   backend:
-    build: ./backend
+    <<: *backend-service
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
-    env_file: .env
     depends_on:
-      redis: {condition: service_healthy}
-    volumes:
-      - uploads:/data/uploads
+      migrate: {condition: service_completed_successfully}
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
-      interval: 30s
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 5s
       timeout: 5s
-      retries: 3
-    restart: unless-stopped
-    init: true
-    stop_grace_period: 30s
-    logging: *default-logging
-    networks: [internal]
+      retries: 15
+      start_period: 15s
 
   worker:
-    build: ./backend
+    <<: *backend-service
     command: ["python", "-m", "app.workers.documents"]
-    env_file: .env
-    volumes:
-      - uploads:/data/uploads
-    restart: unless-stopped
-    init: true
-    stop_grace_period: 30s
-    logging: *default-logging
-    networks: [internal]
-
-  notification-worker:
-    build: ./backend
-    command: ["python", "-m", "app.workers.notifications"]
-    env_file: .env
-    restart: unless-stopped
-    init: true
-    stop_grace_period: 30s
-    logging: *default-logging
-    networks: [internal]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
 
   frontend:
+    image: trolyviet-frontend:local
     build: ./frontend
-    depends_on: [backend]
-    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${DOCKER_WEB_PORT:-8080}:80"
+    depends_on:
+      backend: {condition: service_healthy}
+    restart: "no"
+    init: true
     logging: *default-logging
     networks: [internal]
 
+  # Tùy chọn HTTPS trực tiếp; local/Cloudflare Tunnel không cần bật profile này.
   caddy:
     image: caddy:2-alpine
+    profiles: [https]
     environment:
       APP_DOMAIN: ${APP_DOMAIN:-localhost}
     ports:
@@ -74,8 +96,9 @@ services:
       - ./deployment/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on: [frontend, backend]
-    restart: unless-stopped
+    depends_on:
+      frontend: {condition: service_healthy}
+    restart: "no"
     logging: *default-logging
     networks: [internal]
 
@@ -83,7 +106,7 @@ networks:
   internal:
 
 volumes:
-  redis_data:
+  mysql_data:
   uploads:
   caddy_data:
   caddy_config:

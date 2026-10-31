@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from dataclasses import asdict, dataclass
 
@@ -16,6 +17,7 @@ PRODUCT_HINTS = (
     "dịch vụ",
 )
 PRICE_HINTS = ("giá", "đơn giá", "giá bán", "price", "thành tiền")
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -74,13 +76,18 @@ async def review_catalog_with_ai(text: str) -> DocumentReview:
         summary = result.get("summary")
         issues = result.get("issues")
         if (
-            not isinstance(score, int) or isinstance(score, bool) or not 0 <= score <= 100
-            or not isinstance(summary, str) or not summary.strip()
-            or not isinstance(issues, list) or not all(isinstance(item, str) for item in issues)
+            not isinstance(score, int)
+            or isinstance(score, bool)
+            or not 0 <= score <= 100
+            or not isinstance(summary, str)
+            or not summary.strip()
+            or not isinstance(issues, list)
+            or not all(isinstance(item, str) for item in issues)
         ):
             raise ValueError("Kết quả duyệt không đúng cấu trúc")
     except (ValueError, TypeError) as exc:
-        raise GeminiServiceError("Gemini trả kết quả kiểm duyệt không hợp lệ") from exc
+        logger.warning("Gemini document review invalid response error_type=%s", type(exc).__name__)
+        raise GeminiServiceError("Kết quả kiểm duyệt không hợp lệ. Vui lòng thử lại sau.") from exc
     return DocumentReview(
         passed=result["passed"] and score >= 70 and not issues,
         score=score,

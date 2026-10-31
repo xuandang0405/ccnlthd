@@ -1,0 +1,6 @@
+{
+  "sha256": "8af53633ef3556f0f81217250c7aa8eca9128b9235e7abb1896739e7ea06bbb2",
+  "snapshot": "probe_mechanisms.source.txt",
+  "algorithm": "SHA-256",
+  "source": "backend/benchmarks/probe_mechanisms.py"
+}

@@ -7,7 +7,7 @@ $RuntimeRoot = Join-Path $ProjectRoot ".runtime"
 $PythonExe = Join-Path $BackendRoot ".venv\Scripts\python.exe"
 $StopScript = Join-Path $PSScriptRoot "stop-server.ps1"
 $SupervisorScript = Join-Path $PSScriptRoot "supervise-server.ps1"
-$ProcessNames = @("server-backend", "server-document-worker", "server-notification-worker")
+$ProcessNames = @("server-backend", "server-document-worker")
 $ManagedProcesses = @()
 
 New-Item -ItemType Directory -Force -Path $RuntimeRoot | Out-Null
@@ -95,6 +95,15 @@ foreach ($name in $ProcessNames) {
 Remove-Item -LiteralPath (Join-Path $RuntimeRoot "server.stop") -Force -ErrorAction SilentlyContinue
 
 try {
+    Push-Location $BackendRoot
+    try {
+        & $PythonExe (Join-Path $PSScriptRoot "prepare-mysql.py")
+        if ($LASTEXITCODE -ne 0) { throw "MySQL/schema chua san sang; xem database\HUONG_DAN_MYSQL.md." }
+        $PublicUrl = (& $PythonExe -c "from app.core.config import get_settings; print(get_settings().app_public_url)").TrimEnd('/')
+        if ($LASTEXITCODE -ne 0) { throw "Khong doc duoc backend/.env." }
+    } finally {
+        Pop-Location
+    }
     Write-Host "[3/4] Khoi dong backend va cac worker (log hien tai day)..."
     $ManagedProcesses += Start-ManagedProcess "server-backend" @(
         "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000",
@@ -102,9 +111,6 @@ try {
     )
     $ManagedProcesses += Start-ManagedProcess "server-document-worker" @(
         "-m", "app.workers.documents"
-    )
-    $ManagedProcesses += Start-ManagedProcess "server-notification-worker" @(
-        "-m", "app.workers.notifications"
     )
 
     Write-Host "[4/4] Cho server san sang..."
@@ -128,18 +134,18 @@ try {
     Write-Host "============================================================"
     Write-Host " SERVER DA SAN SANG - GIU CUA SO NAY MO"
     Write-Host "============================================================"
-    Write-Host " Trang chu        : https://seminar.bkpvp.top/"
-    Write-Host " Dang nhap        : https://seminar.bkpvp.top/login"
-    Write-Host " Dashboard User   : https://seminar.bkpvp.top/app"
-    Write-Host " Trang Admin      : https://seminar.bkpvp.top/admin"
-    Write-Host " Test Widget      : https://seminar.bkpvp.top/widget-test.html"
-    Write-Host " Widget Script    : https://seminar.bkpvp.top/widget.js"
+    Write-Host " Trang chu        : $PublicUrl/"
+    Write-Host " Dang nhap        : $PublicUrl/login"
+    Write-Host " Dashboard User   : $PublicUrl/app"
+    Write-Host " Trang Admin      : $PublicUrl/admin"
+    Write-Host " Test Widget      : $PublicUrl/widget-test.html"
+    Write-Host " Widget Script    : $PublicUrl/widget.js"
     Write-Host " API Docs (local) : http://127.0.0.1:8000/docs"
     Write-Host " Health (local)   : http://127.0.0.1:8000/health/ready"
     Write-Host "============================================================"
     Write-Host " Nhan Ctrl+C hoac dong cua so de dung server."
     Write-Host ""
-    Start-Process "https://seminar.bkpvp.top/"
+    Start-Process "$PublicUrl/"
 
     while ($true) {
         foreach ($entry in $ManagedProcesses) {

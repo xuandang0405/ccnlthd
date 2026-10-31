@@ -40,8 +40,8 @@ if ($LASTEXITCODE -ne 0) { throw "Frontend build failed." }
 
 Push-Location $BackendRoot
 try {
-    & $PythonExe (Join-Path $PSScriptRoot "prepare-mongodb.py")
-    if ($LASTEXITCODE -ne 0) { throw "MongoDB preparation failed." }
+    & $PythonExe (Join-Path $PSScriptRoot "prepare-mysql.py")
+    if ($LASTEXITCODE -ne 0) { throw "MySQL/schema chua san sang; xem database\HUONG_DAN_MYSQL.md." }
 } finally {
     Pop-Location
 }

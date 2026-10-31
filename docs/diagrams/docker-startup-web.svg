@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="950" viewBox="0 0 1500 950">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0 L9 5 L0 10" fill="none" stroke="#111" stroke-width="1.5"/></marker></defs>
+<rect width="1500" height="950" fill="white"/>
+<g font-family="Times New Roman,serif" fill="#111" text-anchor="middle" font-size="30">
+<text x="750" y="50" font-size="35" font-weight="bold">Thứ tự khởi động Docker Compose</text>
+<g stroke="#111" stroke-width="2.5" fill="white"><rect x="500" y="100" width="500" height="95"/><rect x="500" y="295" width="500" height="95"/><rect x="140" y="500" width="500" height="95"/><rect x="860" y="500" width="500" height="95"/><rect x="500" y="700" width="500" height="95"/></g>
+<text x="750" y="159" font-weight="bold">MySQL healthy</text><text x="750" y="354" font-weight="bold">Migrate kết thúc, exit code 0</text><text x="390" y="559" font-weight="bold">Backend khởi động</text><text x="1110" y="559" font-weight="bold">Worker tài liệu khởi động</text><text x="750" y="759" font-weight="bold">Frontend Nginx khởi động</text>
+<g stroke="#111" stroke-width="2.5" fill="none" marker-end="url(#arrow)"><path d="M750 195 V295"/><path d="M630 390 L390 500"/><path d="M870 390 L1110 500"/><path d="M390 595 L650 700"/></g>
+<text x="925" y="246" font-size="25">service_healthy</text><text x="750" y="445" font-size="25">service_completed_successfully</text><text x="770" y="652" font-size="25">Chờ backend healthy</text><text x="750" y="859" font-size="26">Caddy chỉ chạy nếu bật profile HTTPS và đợi frontend healthy.</text><text x="750" y="905" font-size="26">Giữ cửa sổ chạy mở; Ctrl+C dừng dịch vụ, không xóa volume dữ liệu.</text>
+</g></svg>

@@ -1,0 +1,9 @@
+{
+  "browser": "headless Microsoft Edge",
+  "checks": [
+    "Swagger UI rendered with the live OpenAPI schema",
+    "Login request and response documentation expanded",
+    "Customer login and dashboard loaded against isolated MySQL",
+    "Customer cannot stay on the admin page"
+  ]
+}

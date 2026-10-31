@@ -1,6 +1,10 @@
-from app.core.mongodb import get_mongo_database, new_document
+from sqlalchemy import func, select, update
+
+from app.core.records import add_record, make_record
 from app.integrations.gemini import GeminiServiceError
+from app.models.entities import AuditLog, ChatbotDocument, Document, User
 from app.services.document_review import DocumentReview
+from tests.conftest import get_test_database
 from tests.test_auth_and_tenants import register
 
 
@@ -10,11 +14,11 @@ async def test_super_admin_access_is_server_enforced(client):
     forbidden = await client.get("/api/v1/admin/summary", headers=auth)
     assert forbidden.status_code == 403
 
-    db = get_mongo_database()
-    result = await db.users.update_one(
-        {"email": "admin@example.com"}, {"$set": {"is_super_admin": True}}
+    db = get_test_database()
+    result = await db.execute(
+        update(User).where(User.email == "admin@example.com").values(**{**{"is_super_admin": True}})
     )
-    assert result.matched_count == 1
+    assert result.rowcount == 1
 
     summary = await client.get("/api/v1/admin/summary", headers=auth)
     assert summary.status_code == 200
@@ -23,8 +27,10 @@ async def test_super_admin_access_is_server_enforced(client):
     assert organizations.status_code == 200
     assert organizations.json()[0]["id"] == me["organizations"][0]["id"]
 
-    await db.users.update_one(
-        {"email": "admin@example.com"}, {"$set": {"is_super_admin": False}}
+    await db.execute(
+        update(User)
+        .where(User.email == "admin@example.com")
+        .values(**{**{"is_super_admin": False}})
     )
     demoted = await client.get("/api/v1/admin/summary", headers=auth)
     assert demoted.status_code == 403
@@ -35,9 +41,11 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client, m
     customer_tokens, customer_me = await register(
         client, "portal-customer@example.com", "Portal Customer"
     )
-    db = get_mongo_database()
-    await db.users.update_one(
-        {"email": "portal-admin@example.com"}, {"$set": {"is_super_admin": True}}
+    db = get_test_database()
+    await db.execute(
+        update(User)
+        .where(User.email == "portal-admin@example.com")
+        .values(**{**{"is_super_admin": True}})
     )
     admin_headers = {"Authorization": f"Bearer {admin_tokens['access_token']}"}
     organization_id = customer_me["organizations"][0]["id"]
@@ -54,7 +62,7 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client, m
     assert admin_chatbots.status_code == 200
     assert admin_chatbots.json()[0]["organization_name"] == "Portal Customer"
 
-    document = new_document(
+    document = make_record(
         organization_id=organization_id,
         original_name="bang-gia.xlsx",
         storage_key="test/bang-gia.xlsx",
@@ -67,10 +75,18 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client, m
         approval_note=None,
         ai_review=None,
     )
-    await db.documents.insert_one(document)
-    assert await db.chatbot_documents.count_documents({"document_id": document["_id"]}) == 0
+    document = await add_record(db, Document, document)
+    document_id = document.id
+    assert (
+        await db.scalar(
+            select(func.count())
+            .select_from(ChatbotDocument)
+            .where(ChatbotDocument.document_id == document_id)
+        )
+        == 0
+    )
     disabled_review = await client.post(
-        f"/api/v1/admin/documents/{document['_id']}/ai-review", headers=admin_headers
+        f"/api/v1/admin/documents/{document_id}/ai-review", headers=admin_headers
     )
     assert disabled_review.status_code == 409
     enabled = await client.put(
@@ -85,22 +101,38 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client, m
 
     monkeypatch.setattr("app.api.admin.review_catalog_with_ai", unavailable_ai)
     failed_review = await client.post(
-        f"/api/v1/admin/documents/{document['_id']}/ai-review", headers=admin_headers
+        f"/api/v1/admin/documents/{document_id}/ai-review", headers=admin_headers
     )
     assert failed_review.status_code == 503
-    assert (await db.documents.find_one({"_id": document["_id"]}))["approval_status"] == "PENDING"
+    assert "gemini" not in failed_review.text.casefold()
+    assert "Vui lòng thử lại sau" in failed_review.json()["detail"]
+    assert (
+        await db.scalar(
+            select(Document)
+            .where(Document.id == document_id)
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
+    )["approval_status"] == "PENDING"
 
     async def approved_by_ai(_text):
         return DocumentReview(True, 90, 1, 2, "Có sản phẩm và giá", [])
 
     monkeypatch.setattr("app.api.admin.review_catalog_with_ai", approved_by_ai)
     ai_review = await client.post(
-        f"/api/v1/admin/documents/{document['_id']}/ai-review", headers=admin_headers
+        f"/api/v1/admin/documents/{document_id}/ai-review", headers=admin_headers
     )
     assert ai_review.status_code == 200, ai_review.text
     assert ai_review.json()["ai_review"]["score"] >= 70
     assert ai_review.json()["approval_status"] == "APPROVED"
-    assert await db.chatbot_documents.count_documents({"document_id": document["_id"]}) == 1
+    assert (
+        await db.scalar(
+            select(func.count())
+            .select_from(ChatbotDocument)
+            .where(ChatbotDocument.document_id == document_id)
+        )
+        == 1
+    )
 
     moderation = await client.put(
         "/api/v1/admin/settings/moderation",
@@ -111,14 +143,28 @@ async def test_admin_manages_chatbots_documents_moderation_and_tickets(client, m
     assert moderation.json()["auto_review"] is False
     user_document = await client.get("/api/v1/documents", headers=customer_headers)
     assert user_document.json()[0]["approval_status"] == "PENDING"
-    assert await db.chatbot_documents.count_documents({"document_id": document["_id"]}) == 0
+    assert (
+        await db.scalar(
+            select(func.count())
+            .select_from(ChatbotDocument)
+            .where(ChatbotDocument.document_id == document_id)
+        )
+        == 0
+    )
     manual = await client.patch(
-        f"/api/v1/admin/documents/{document['_id']}/approval",
+        f"/api/v1/admin/documents/{document_id}/approval",
         headers=admin_headers,
         json={"approval_status": "APPROVED"},
     )
     assert manual.status_code == 200, manual.text
-    assert await db.chatbot_documents.count_documents({"document_id": document["_id"]}) == 1
+    assert (
+        await db.scalar(
+            select(func.count())
+            .select_from(ChatbotDocument)
+            .where(ChatbotDocument.document_id == document_id)
+        )
+        == 1
+    )
 
     ticket = await client.post(
         "/api/v1/tickets",
@@ -175,9 +221,11 @@ async def test_admin_can_grant_and_reclaim_user_and_chatbot_credits(client):
     customer_tokens, customer = await register(
         client, "credits-customer@example.com", "Customer Company"
     )
-    db = get_mongo_database()
-    await db.users.update_one(
-        {"email": "credits-admin@example.com"}, {"$set": {"is_super_admin": True}}
+    db = get_test_database()
+    await db.execute(
+        update(User)
+        .where(User.email == "credits-admin@example.com")
+        .values(**{**{"is_super_admin": True}})
     )
     admin_headers = {"Authorization": f"Bearer {admin_tokens['access_token']}"}
     customer_headers = {
@@ -248,8 +296,9 @@ async def test_admin_can_grant_and_reclaim_user_and_chatbot_credits(client):
         f"/api/v1/admin/users/{user_id}/credits",
         headers=admin_headers,
         json={
-            "organization_id": (await client.get("/api/v1/auth/me", headers=admin_headers))
-            .json()["organizations"][0]["id"],
+            "organization_id": (await client.get("/api/v1/auth/me", headers=admin_headers)).json()[
+                "organizations"
+            ][0]["id"],
             "amount": 10,
             "reason": "Sai doanh nghiệp",
         },
@@ -324,18 +373,14 @@ async def test_admin_can_grant_and_reclaim_user_and_chatbot_credits(client):
     )
     assert promoted.status_code == 200, promoted.text
     assert promoted.json()["is_super_admin"] is True
-    assert (
-        await client.get("/api/v1/admin/summary", headers=customer_headers)
-    ).status_code == 200
+    assert (await client.get("/api/v1/admin/summary", headers=customer_headers)).status_code == 200
     demoted = await client.patch(
         f"/api/v1/admin/users/{user_id}",
         headers=admin_headers,
         json={"is_super_admin": False},
     )
     assert demoted.status_code == 200
-    assert (
-        await client.get("/api/v1/admin/summary", headers=customer_headers)
-    ).status_code == 403
+    assert (await client.get("/api/v1/admin/summary", headers=customer_headers)).status_code == 403
     admin_id = (await client.get("/api/v1/auth/me", headers=admin_headers)).json()["id"]
     self_demote = await client.patch(
         f"/api/v1/admin/users/{admin_id}",
@@ -351,9 +396,13 @@ async def test_admin_can_grant_and_reclaim_user_and_chatbot_credits(client):
     assert blocked.status_code == 200
     old_session = await client.get("/api/v1/auth/me", headers=customer_headers)
     assert old_session.status_code == 401
-    audit = await db.audit_logs.count_documents(
-        {"actor_user_id": (await client.get("/api/v1/auth/me", headers=admin_headers))
-         .json()["id"]}
+    audit = await db.scalar(
+        select(func.count())
+        .select_from(AuditLog)
+        .where(
+            AuditLog.actor_user_id
+            == (await client.get("/api/v1/auth/me", headers=admin_headers)).json()["id"]
+        )
     )
     assert audit >= 5
     audit_response = await client.get("/api/v1/admin/audit-logs", headers=admin_headers)

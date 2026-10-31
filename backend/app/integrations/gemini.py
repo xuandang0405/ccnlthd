@@ -7,6 +7,7 @@ from google import genai
 from google.genai import errors, types
 
 from app.core.config import get_settings
+from app.services.budget import budget_guidance
 
 logger = logging.getLogger(__name__)
 TRANSIENT_STATUS_CODES = {408, 429, 500, 502, 503, 504}
@@ -33,8 +34,9 @@ class GeminiService:
 
     def _validate_configuration(self) -> None:
         if not self._api_key or not self._model:
+            logger.warning("Gemini configuration missing GEMINI_API_KEY or GEMINI_MODEL")
             raise GeminiConfigurationError(
-                "Gemini chưa được cấu hình. Cần GEMINI_API_KEY và GEMINI_MODEL hợp lệ."
+                "Dịch vụ trợ lý AI chưa sẵn sàng. Vui lòng thử lại sau ít phút."
             )
 
     async def review_document(self, text: str) -> str:
@@ -78,10 +80,14 @@ class GeminiService:
                         logger.warning("Gemini document review retry attempt=%d", attempt + 1)
                         await asyncio.sleep(2**attempt)
             if not response.text:
-                raise GeminiServiceError("Gemini không trả về kết quả duyệt tài liệu")
+                logger.warning("Gemini document review returned no text")
+                raise GeminiServiceError("Chưa nhận được kết quả kiểm duyệt. Vui lòng thử lại sau.")
             return response.text
         except (errors.APIError, TimeoutError, httpx.RequestError) as exc:
-            raise GeminiServiceError("Không thể kiểm duyệt bằng Gemini lúc này") from exc
+            logger.warning(
+                "Gemini document review failed status=%s", getattr(exc, "code", "timeout")
+            )
+            raise GeminiServiceError("Chưa thể kiểm duyệt tài liệu. Vui lòng thử lại sau.") from exc
         finally:
             await client.aio.aclose()
             client.close()
@@ -114,6 +120,7 @@ class GeminiService:
             "và dùng **chữ đậm** cho tên sản phẩm, giá cùng điều kiện quan trọng. Không dùng bảng. "
             f"Phong cách trả lời: {tone}."
         )
+        system_instruction += budget_guidance(question, context)
         prompt = f"NGỮ CẢNH:\n{context or '[không có dữ liệu phù hợp]'}\n\nCÂU HỎI:\n{question}"
         client = genai.Client(api_key=self._api_key)
         try:
@@ -150,15 +157,13 @@ class GeminiService:
                                 MAX_ATTEMPTS,
                             )
                             message = (
-                                "Gemini đang tạm quá tải. Vui lòng thử lại sau ít phút."
-                                if transient
-                                else "Không thể gọi Gemini với model/cấu hình hiện tại"
+                                "Hệ thống đang gặp sự cố khi xử lý dữ liệu. "
+                                "Vui lòng thử lại sau ít phút."
                             )
                             raise GeminiServiceError(message) from exc
                         delay = (2**attempt) + secrets.randbelow(501) / 1000
                         logger.warning(
-                            "Gemini transient failure status=%s attempt=%d/%d; "
-                            "retrying in %.2fs",
+                            "Gemini transient failure status=%s attempt=%d/%d; retrying in %.2fs",
                             code,
                             attempt + 1,
                             MAX_ATTEMPTS,
@@ -167,10 +172,14 @@ class GeminiService:
                         await asyncio.sleep(delay)
             answer = (response.text or "").strip()
             if not answer:
-                raise GeminiServiceError("Gemini không trả về nội dung")
+                logger.warning("Gemini chat returned no text")
+                raise GeminiServiceError("Chưa nhận được câu trả lời. Vui lòng thử lại sau.")
             return answer
         except TimeoutError as exc:
-            raise GeminiServiceError("Gemini phản hồi quá thời gian cho phép") from exc
+            logger.warning("Gemini chat exceeded total timeout")
+            raise GeminiServiceError(
+                "Hệ thống phản hồi quá thời gian. Vui lòng thử lại sau."
+            ) from exc
         finally:
             await client.aio.aclose()
             client.close()

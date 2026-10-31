@@ -1,13 +1,14 @@
 import { Link, useLocation } from "react-router-dom";
 import { PublicNav } from "../components/PublicNav";
+import { siteConfig } from "../config/site";
 
 const pages: Record<string, [string, string[]]> = {
   privacy: [
     "Bảo mật và quyền riêng tư",
     [
-      "Mạch AI xử lý thông tin tài khoản, tài liệu, cuộc hội thoại và thông tin liên hệ mà khách chủ động cung cấp để vận hành dịch vụ trợ lý bán hàng.",
+      `${siteConfig.name} xử lý thông tin tài khoản, tài liệu, cuộc hội thoại và thông tin liên hệ mà khách chủ động cung cấp để vận hành dịch vụ trợ lý bán hàng.`,
       "Tài liệu được gắn với doanh nghiệp đã tải lên. Quản trị viên hệ thống có thể xem và kiểm duyệt tài liệu để hỗ trợ vận hành và xử lý yêu cầu hỗ trợ.",
-      "Khi sử dụng trợ lý, câu hỏi và phần nội dung tài liệu liên quan có thể được gửi tới dịch vụ AI của Google để tạo câu trả lời. Một số chức năng thanh toán và thông báo cũng sử dụng dịch vụ tích hợp bên ngoài.",
+      "Khi sử dụng trợ lý, câu hỏi và phần nội dung tài liệu liên quan có thể được gửi tới dịch vụ AI của Google để tạo câu trả lời. Thanh toán sử dụng dịch vụ tích hợp bên ngoài; thông báo khách hàng mới được hiển thị trong trang quản lý của doanh nghiệp.",
       "Không nhập thông tin nhạy cảm không cần thiết vào cuộc trò chuyện. Nếu cần hỗ trợ về dữ liệu, hãy tạo yêu cầu trong mục Hỗ trợ sau khi đăng nhập.",
     ],
   ],
@@ -35,13 +36,13 @@ export function LegalPage() {
   const [title, paragraphs] = pages[slug] ?? pages.privacy;
 
   return (
-    <div className="marketing-shell min-h-screen flex flex-col">
+    <div className="marketing-shell min-h-[100dvh] flex flex-col">
       <PublicNav />
 
       <main className="flex-1 mx-auto max-w-4xl px-5 py-16 w-full">
         <Link
           to="/"
-          className="text-sm font-semibold text-slate-600 hover:text-[#2455c7] inline-block mb-8"
+          className="text-sm font-semibold text-slate-600 hover:text-brand inline-block mb-8"
         >
           ← Về trang chủ
         </Link>
@@ -55,7 +56,7 @@ export function LegalPage() {
           <div className="mt-8 space-y-6 text-base leading-8 text-slate-700 border-t border-slate-200 pt-6">
             {paragraphs.map((p, idx) => (
               <p key={idx} className="flex items-start gap-3">
-                <span className="font-mono text-xs font-bold text-[#0052FF] mt-1 shrink-0">
+                <span className="font-sans text-sm font-bold text-brand mt-1 shrink-0">
                   {idx + 1}.
                 </span>
                 <span>{p}</span>
@@ -67,8 +68,8 @@ export function LegalPage() {
         </article>
       </main>
 
-      <footer className="border-t border-slate-200 bg-white px-5 py-6 text-xs font-mono text-slate-500 text-center">
-        © 2026 Mạch AI · Trợ lý bán hàng cho website
+      <footer className="border-t border-slate-200 bg-white px-5 py-6 text-sm font-sans text-slate-500 text-center">
+        © 2026 {siteConfig.name} · {siteConfig.tagline}
       </footer>
     </div>
   );

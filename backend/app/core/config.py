@@ -23,12 +23,10 @@ class Settings(BaseSettings):
     access_token_minutes: int = Field(default=15, ge=5, le=120)
     login_session_hours: int = Field(default=4, ge=1, le=24)
 
-    database_url: str = "sqlite+aiosqlite:///./sales_assistant.db"
-    database_backend: Literal["sql", "mongodb"] = "mongodb"
-    mongodb_uri: SecretStr | None = None
-    mongodb_database: str = "ai_sales_assistant"
+    database_url: str = "mysql+aiomysql://root@127.0.0.1:3306/ccnlthd?charset=utf8mb4"
+    database_backend: Literal["sql"] = "sql"
     redis_url: str = "redis://localhost:6379/0"
-    rate_limit_backend: Literal["redis", "memory", "sqlite", "mongodb"] = "mongodb"
+    rate_limit_backend: Literal["redis", "memory", "sqlite", "sql"] = "sql"
     rate_limit_sqlite_path: Path = Path("../.runtime/rate-limits.db")
 
     gemini_api_key: SecretStr | None = None
@@ -43,7 +41,6 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_from: str | None = None
     smtp_use_tls: bool = True
-    telegram_platform_bot_token: SecretStr | None = None
     sepay_auth_mode: str | None = None
     sepay_webhook_secret: SecretStr | None = None
     sepay_api_key: SecretStr | None = None

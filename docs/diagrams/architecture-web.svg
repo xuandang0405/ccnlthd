@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="950" viewBox="0 0 1600 950">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0 L9 5 L0 10" fill="none" stroke="#111" stroke-width="1.5"/></marker></defs>
+<rect width="1600" height="950" fill="white"/>
+<g font-family="Times New Roman,serif" font-size="30" fill="#111" text-anchor="middle">
+<text x="800" y="50" font-size="34" font-weight="bold">Kiến trúc các thành phần đang sử dụng</text>
+<g stroke="#111" stroke-width="2" fill="white"><rect x="485" y="95" width="630" height="95"/><rect x="485" y="265" width="630" height="110"/><rect x="485" y="455" width="630" height="115"/><rect x="60" y="455" width="325" height="115"/><rect x="1215" y="455" width="325" height="115"/><rect x="220" y="725" width="480" height="115"/><rect x="900" y="725" width="480" height="115"/></g>
+<text x="800" y="135" font-weight="bold">Trình duyệt và widget chatbot</text><text x="800" y="171">Trang quản lý hiển thị thông báo khách mới</text>
+<text x="800" y="309" font-weight="bold">Frontend React và Nginx</text><text x="800" y="350">Host 127.0.0.1:8080 → container:80</text>
+<text x="800" y="501" font-weight="bold">Backend FastAPI :8000</text><text x="800" y="541">SQLAlchemy async, phân quyền, API và AI</text>
+<text x="222" y="501" font-weight="bold">Worker tài liệu</text><text x="222" y="541">Nhận và xử lý file nền</text>
+<text x="1377" y="501" font-weight="bold">Dịch vụ AI ngoài</text><text x="1377" y="541">Google GenAI aio</text>
+<text x="460" y="770" font-weight="bold">MySQL 8.4 :3306</text><text x="460" y="803" font-size="27">Volume mysql_data</text><text x="460" y="832" font-size="27">Lưu tài khoản và liên hệ</text>
+<text x="1140" y="770" font-weight="bold">Volume uploads</text><text x="1140" y="811">Tệp tài liệu và tệp hỗ trợ</text>
+<g fill="none" stroke="#111" stroke-width="2.5" marker-end="url(#arrow)"><path d="M800 190 V265"/><path d="M800 375 V455"/><path d="M1115 512 H1215"/><path d="M690 570 L520 725"/><path d="M920 570 L1090 725"/><path d="M222 570 L400 725"/><path d="M300 570 L1000 725"/></g>
+<text x="960" y="232" font-size="23">HTTP, giao diện và polling</text><text x="940" y="419" font-size="23">Proxy /api, /docs, /health</text>
+<text x="800" y="892" font-size="25">Migrate là tiến trình Alembic chạy một lần trước backend và worker tài liệu.</text>
+<text x="800" y="930" font-size="25">Caddy là lựa chọn HTTPS. Thông báo khách hàng đọc qua API, không có worker gửi tin riêng.</text>
+</g></svg>

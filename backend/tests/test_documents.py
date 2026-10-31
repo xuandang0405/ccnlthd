@@ -3,13 +3,24 @@ from io import BytesIO
 import pytest
 from httpx import AsyncClient
 from openpyxl import Workbook
+from sqlalchemy import and_, func, select
 
-from app.core.mongodb import get_mongo_database, new_document, record
+from app.core.records import add_record, add_records, make_record, update_record
+from app.core.security import hash_password
 from app.integrations.gemini import GeminiServiceError
+from app.models.entities import (
+    Chatbot,
+    ChatbotDocument,
+    Document,
+    Organization,
+    SystemSetting,
+    User,
+)
 from app.services.document_links import revoke_auto_approvals
 from app.services.document_review import DocumentReview, review_catalog_with_ai
 from app.services.documents import chunks, parse_xlsx
 from app.workers.documents import process
+from tests.conftest import get_test_database
 from tests.test_auth_and_tenants import register
 
 
@@ -66,29 +77,85 @@ async def test_ai_review_parses_structured_result(monkeypatch):
         return "not-json"
 
     monkeypatch.setattr("app.integrations.gemini.GeminiService.review_document", malformed_review)
-    with pytest.raises(GeminiServiceError):
+    with pytest.raises(GeminiServiceError) as failure:
         await review_catalog_with_ai("Sản phẩm A, giá 500000 VND")
+    assert "gemini" not in str(failure.value).casefold()
 
 
 async def test_revoking_auto_approval_preserves_manual_approval():
-    db = get_mongo_database()
-    auto = new_document(
-        organization_id="org", storage_key="auto.xlsx", approval_status="APPROVED"
+    db = get_test_database()
+    await add_record(db, Organization, make_record(id="org", name="Test", slug="test"))
+    await add_record(
+        db,
+        User,
+        make_record(
+            id="admin",
+            email="review@example.com",
+            full_name="Admin",
+            password_hash=hash_password("StrongPassword123"),
+        ),
     )
-    manual = new_document(
-        organization_id="org", storage_key="manual.xlsx", approval_status="APPROVED",
+    for bot_id in ("auto-bot", "manual-bot"):
+        await add_record(db, Chatbot, make_record(id=bot_id, organization_id="org", name=bot_id))
+    auto = make_record(
+        organization_id="org",
+        storage_key="auto.xlsx",
+        approval_status="APPROVED",
+        original_name="auto.xlsx",
+        mime_type="application/xlsx",
+        size_bytes=100,
+    )
+    manual = make_record(
+        organization_id="org",
+        storage_key="manual.xlsx",
+        approval_status="APPROVED",
         approved_by_user_id="admin",
+        original_name="manual.xlsx",
+        mime_type="application/xlsx",
+        size_bytes=100,
     )
-    await db.documents.insert_many([auto, manual])
-    await db.chatbot_documents.insert_many([
-        new_document(document_id=auto["_id"], chatbot_id="auto-bot"),
-        new_document(document_id=manual["_id"], chatbot_id="manual-bot"),
-    ])
+    await add_records(db, Document, [auto, manual])
+    await add_records(
+        db,
+        ChatbotDocument,
+        [
+            make_record(organization_id="org", document_id=auto["id"], chatbot_id="auto-bot"),
+            make_record(organization_id="org", document_id=manual["id"], chatbot_id="manual-bot"),
+        ],
+    )
     assert await revoke_auto_approvals(db) == 1
-    assert (await db.documents.find_one({"_id": auto["_id"]}))["approval_status"] == "PENDING"
-    assert (await db.documents.find_one({"_id": manual["_id"]}))["approval_status"] == "APPROVED"
-    assert await db.chatbot_documents.count_documents({"document_id": auto["_id"]}) == 0
-    assert await db.chatbot_documents.count_documents({"document_id": manual["_id"]}) == 1
+    assert (
+        await db.scalar(
+            select(Document)
+            .where(Document.id == auto["id"])
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
+    )["approval_status"] == "PENDING"
+    assert (
+        await db.scalar(
+            select(Document)
+            .where(Document.id == manual["id"])
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
+    )["approval_status"] == "APPROVED"
+    assert (
+        await db.scalar(
+            select(func.count())
+            .select_from(ChatbotDocument)
+            .where(ChatbotDocument.document_id == auto["id"])
+        )
+        == 0
+    )
+    assert (
+        await db.scalar(
+            select(func.count())
+            .select_from(ChatbotDocument)
+            .where(ChatbotDocument.document_id == manual["id"])
+        )
+        == 1
+    )
 
 
 async def test_xlsx_upload_and_tenant_access(client: AsyncClient):
@@ -144,9 +211,7 @@ async def test_upload_links_to_chatbot_and_delete_removes_document(client: Async
         "Authorization": f"Bearer {tokens['access_token']}",
         "X-Organization-ID": organization_id,
     }
-    chatbot = await client.post(
-        "/api/v1/chatbots", headers=headers, json={"name": "Tư vấn viên"}
-    )
+    chatbot = await client.post("/api/v1/chatbots", headers=headers, json={"name": "Tư vấn viên"})
     assert chatbot.status_code == 201, chatbot.text
 
     uploaded = await client.post(
@@ -164,9 +229,16 @@ async def test_upload_links_to_chatbot_and_delete_removes_document(client: Async
     document_id = uploaded.json()["id"]
     chatbot_id = chatbot.json()["id"]
 
-    db = get_mongo_database()
-    relation = await db.chatbot_documents.find_one(
-        {"chatbot_id": chatbot_id, "document_id": document_id}
+    db = get_test_database()
+    relation = await db.scalar(
+        select(ChatbotDocument)
+        .where(
+            and_(
+                ChatbotDocument.chatbot_id == chatbot_id, ChatbotDocument.document_id == document_id
+            )
+        )
+        .limit(1)
+        .execution_options(populate_existing=True)
     )
     assert relation is None
     premature_link = await client.put(
@@ -176,8 +248,24 @@ async def test_upload_links_to_chatbot_and_delete_removes_document(client: Async
 
     deleted = await client.delete(f"/api/v1/documents/{document_id}", headers=headers)
     assert deleted.status_code == 204, deleted.text
-    assert await db.documents.find_one({"_id": document_id}) is None
-    assert await db.chatbot_documents.find_one({"document_id": document_id}) is None
+    assert (
+        await db.scalar(
+            select(Document)
+            .where(Document.id == document_id)
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
+        is None
+    )
+    assert (
+        await db.scalar(
+            select(ChatbotDocument)
+            .where(ChatbotDocument.document_id == document_id)
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
+        is None
+    )
 
     listed = await client.get("/api/v1/documents", headers=headers)
     assert listed.status_code == 200
@@ -193,7 +281,7 @@ async def test_worker_only_links_documents_after_ai_approval(client: AsyncClient
     }
     chatbot = await client.post("/api/v1/chatbots", headers=headers, json={"name": "Bot review"})
     assert chatbot.status_code == 201
-    db = get_mongo_database()
+    db = get_test_database()
     calls = []
 
     async def ai_review(text):
@@ -202,26 +290,44 @@ async def test_worker_only_links_documents_after_ai_approval(client: AsyncClient
 
     monkeypatch.setattr("app.workers.documents.review_catalog_with_ai", ai_review)
     for auto_review in (False, True):
-        await db.system_settings.update_one(
-            {"_id": "document_moderation"},
-            {"$set": {"auto_review": auto_review}},
-            upsert=True,
+        await update_record(
+            db,
+            SystemSetting,
+            (SystemSetting.id == "document_moderation"),
+            values={"auto_review": auto_review},
+            defaults=make_record(**{"id": "document_moderation"}),
         )
         uploaded = await client.post(
-            "/api/v1/documents", headers=headers,
-            files={"file": (
-                "bang-gia.xlsx", xlsx_bytes(),
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )},
+            "/api/v1/documents",
+            headers=headers,
+            files={
+                "file": (
+                    "bang-gia.xlsx",
+                    xlsx_bytes(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
         )
         assert uploaded.status_code == 202, uploaded.text
         document_id = uploaded.json()["id"]
-        await process(db, record(await db.documents.find_one({"_id": document_id})))
+        await process(
+            db,
+            await db.scalar(
+                select(Document)
+                .where(Document.id == document_id)
+                .limit(1)
+                .execution_options(populate_existing=True)
+            ),
+        )
         updated = await client.get("/api/v1/documents", headers=headers)
         document = next(item for item in updated.json() if item["id"] == document_id)
         assert document["status"] == "DONE"
         assert document["approval_status"] == ("APPROVED" if auto_review else "PENDING")
-        linked = await db.chatbot_documents.count_documents({"document_id": document_id})
+        linked = await db.scalar(
+            select(func.count())
+            .select_from(ChatbotDocument)
+            .where(ChatbotDocument.document_id == document_id)
+        )
         assert linked == int(auto_review)
         removed = await client.delete(f"/api/v1/documents/{document_id}", headers=headers)
         assert removed.status_code == 204

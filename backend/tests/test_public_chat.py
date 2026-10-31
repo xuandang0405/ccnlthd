@@ -1,12 +1,17 @@
 from collections.abc import AsyncIterator
 
+import pytest
 from httpx import AsyncClient
+from sqlalchemy import update
 
 from app.api.public_chat import get_gemini_service, retrieve_context
-from app.core.mongodb import get_mongo_database, new_document
+from app.core.config import get_settings
+from app.core.records import add_record, add_records, make_record
 from app.core.redis import SqliteRateLimitStore, get_redis
 from app.main import app
+from app.models.entities import ChatbotDocument, Document, DocumentChunk, DocumentChunkToken
 from app.services.documents import normalize_search_text, search_tokens
+from tests.conftest import get_test_database
 from tests.test_auth_and_tenants import register
 
 
@@ -48,7 +53,10 @@ async def test_only_widget_page_can_be_embedded(client: AsyncClient):
     assert dashboard.headers["Content-Security-Policy"] == "frame-ancestors 'none'"
 
 
-async def test_retrieval_ranks_exact_excel_product_above_generic_matches(client: AsyncClient):
+@pytest.mark.parametrize("index_mode", ["indexed", "legacy", "mixed"])
+async def test_retrieval_ranks_exact_excel_product_above_generic_matches(
+    client: AsyncClient, index_mode: str
+):
     tokens, me = await register(client, "ranking@example.com", "Ranking Company")
     organization_id = me["organizations"][0]["id"]
     headers = {
@@ -59,37 +67,52 @@ async def test_retrieval_ranks_exact_excel_product_above_generic_matches(client:
         "/api/v1/chatbots", json={"name": "Ranking Bot"}, headers=headers
     )
     chatbot_id = chatbot_response.json()["id"]
-    db = get_mongo_database()
-    document = new_document(
+    db = get_test_database()
+    document = make_record(
         organization_id=organization_id,
         original_name="catalog.xlsx",
+        storage_key="test/catalog.xlsx",
+        mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        size_bytes=100,
         status="DONE",
         approval_status="APPROVED",
     )
-    await db.documents.insert_one(document)
-    await db.chatbot_documents.insert_one(
-        new_document(
+    document = await add_record(db, Document, document)
+    await add_record(
+        db,
+        ChatbotDocument,
+        make_record(
             organization_id=organization_id,
             chatbot_id=chatbot_id,
-            document_id=document["_id"],
-        )
+            document_id=document["id"],
+        ),
     )
-    generic = "Tên sản phẩm: Card đồ họa khác 12GB | Giá (VNĐ): 15000000"
     exact = "Tên sản phẩm: Intel Arc B580 12GB | Giá (VNĐ): 8990000"
-    contents = [generic.replace("khác", f"khác {index}") for index in range(20)] + [exact]
-    await db.document_chunks.insert_many(
-        [
-            new_document(
-                organization_id=organization_id,
-                document_id=document["_id"],
-                chunk_index=index,
-                content=content,
-                search_text=normalize_search_text(content),
-                search_tokens=search_tokens(content),
-            )
-            for index, content in enumerate(contents)
-        ]
-    )
+    contents = [
+        f"Tên sản phẩm: Intel Arc A{index} 12GB | Giá (VNĐ): 15000000" for index in range(401)
+    ] + [exact]
+    chunks = [
+        make_record(
+            organization_id=organization_id,
+            document_id=document["id"],
+            chunk_index=index,
+            content=content,
+            search_text=normalize_search_text(content),
+            search_tokens=search_tokens(content),
+        )
+        for index, content in enumerate(contents)
+    ]
+    await add_records(db, DocumentChunk, chunks)
+    if index_mode != "legacy":
+        indexed_chunks = chunks if index_mode == "indexed" else chunks[:-1]
+        db.add_all(
+            [
+                DocumentChunkToken(chunk_id=chunk["id"], token=token)
+                for chunk in indexed_chunks
+                for token in set(chunk["search_tokens"])
+            ]
+        )
+        await db.flush()
 
     context, _, matched = await retrieve_context(
         db, organization_id, chatbot_id, "Intel Arc B580 12GB giá bao nhiêu?"
@@ -101,17 +124,17 @@ async def test_retrieval_ranks_exact_excel_product_above_generic_matches(client:
         db, organization_id, chatbot_id, "Intel Arc B9999 24GB giá bao nhiêu?"
     )
     assert missing is False
-    await db.documents.update_one(
-        {"_id": document["_id"]}, {"$set": {"approval_status": "PENDING"}}
+    await db.execute(
+        update(Document)
+        .where(Document.id == document["id"])
+        .values(**{**{"approval_status": "PENDING"}})
     )
     pending_context, _, pending_match = await retrieve_context(
         db, organization_id, chatbot_id, "Intel Arc B580 12GB giá bao nhiêu?"
     )
     assert pending_context == ""
     assert pending_match is False
-    await db.documents.update_one(
-        {"_id": document["_id"]}, {"$unset": {"approval_status": ""}}
-    )
+    await db.execute(update(Document).where(Document.id == document["id"]).values(**{}))
     blocked_context, _, blocked = await retrieve_context(
         db, organization_id, chatbot_id, "Intel Arc B580 12GB giá bao nhiêu?"
     )
@@ -142,13 +165,20 @@ async def test_widget_uses_opaque_visitor_session(client: AsyncClient):
     app.dependency_overrides[get_redis] = override_redis
     app.dependency_overrides[get_gemini_service] = lambda: FakeGemini()
     try:
+        widget_origin = get_settings().cors_origins[0]
         message = await client.post(
             f"/api/v1/public/chat/{public_id}/messages",
-            headers={"X-Visitor-Token": visitor_token},
+            headers={"X-Visitor-Token": visitor_token, "Origin": widget_origin},
             json={"message": "Giá sản phẩm A là bao nhiêu?"},
         )
         assert message.status_code == 200, message.text
         assert "chưa có thông tin chính xác" in message.json()["reply"]
+        assert message.headers["Access-Control-Allow-Origin"] == widget_origin
+        exposed_headers = {
+            header.strip().lower()
+            for header in message.headers["Access-Control-Expose-Headers"].split(",")
+        }
+        assert "x-credit-remaining" in exposed_headers
         assert message.headers["X-Credit-Remaining"] == "19"
         assert message.json()["remaining_credits"] == 19
 

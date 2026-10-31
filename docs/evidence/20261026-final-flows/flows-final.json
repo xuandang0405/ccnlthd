@@ -1,0 +1,195 @@
+{
+  "started_at": "2026-10-26T15:59:06.519Z",
+  "requests": [
+    {
+      "path": "/auth/login",
+      "method": "POST",
+      "status": 200,
+      "request_id": "f07371b7-7478-46db-b90c-f38b0b844452"
+    },
+    {
+      "path": "/auth/me",
+      "method": "GET",
+      "status": 200,
+      "request_id": "8eb0c770-fbdb-4751-8e14-ad40f51c6fbf"
+    },
+    {
+      "path": "/chatbots",
+      "method": "GET",
+      "status": 200,
+      "request_id": "655871d6-8ea3-4760-a66c-f9d91827b5ca"
+    },
+    {
+      "path": "/public/chat/afdbdb90-2f53-4676-97bf-0a3689ca2d4c/messages",
+      "method": "POST",
+      "status": 429,
+      "request_id": "d3c9386b-ea05-4f44-a324-452736d40c4b"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "669f34cd-a0c1-4349-b300-d5120d3e14d2"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "b2fa40a1-7306-41ac-a675-c4d2f6492a7e"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "2eaf4263-8e94-4ac2-9a04-3f9f811d401a"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "605774cb-58bd-4936-bd35-ee730e39ed5f"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "678e62bc-6402-477b-867e-edff8f9e3774"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "26537f71-b8d5-4777-b81c-f430dead8f91"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "bfa51c24-82a1-4982-a997-4e1101cb9a0c"
+    },
+    {
+      "path": "/documents/1c196094-70d8-4678-85ce-2588604fef34/retry",
+      "method": "POST",
+      "status": 200,
+      "request_id": "2591b876-c765-4062-ab81-7c0449468f03"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "e36ac871-ba4b-4d2f-b906-505e7ee9dd71"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "deffca4b-81a1-4346-a38d-14468f1b0d1b"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "116cfb1e-727e-4269-be05-37363dd68504"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "4468b606-f387-49b7-85d9-f641b4f5080c"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "35c67089-5d4b-4123-8299-d6b37e62315c"
+    },
+    {
+      "path": "/documents",
+      "method": "GET",
+      "status": 200,
+      "request_id": "a700f788-f509-42d9-8d41-d3aa98d68c0b"
+    },
+    {
+      "path": "/public/chat/afdbdb90-2f53-4676-97bf-0a3689ca2d4c/messages",
+      "method": "POST",
+      "status": 200,
+      "request_id": "03223d20-16cd-4798-b6dc-a44a4906bdd9"
+    }
+  ],
+  "checks": [
+    {
+      "name": "429_does_not_charge_or_reserve",
+      "passed": true
+    },
+    {
+      "name": "lead_and_login_survive_api_worker_restart",
+      "passed": true
+    },
+    {
+      "name": "rate_window_survives_restart",
+      "passed": true
+    },
+    {
+      "name": "contacted_retains_record",
+      "passed": true
+    },
+    {
+      "name": "worker_retry_done_pending_not_published",
+      "passed": true
+    },
+    {
+      "name": "window_restarts_at_one_after_60s",
+      "passed": true
+    }
+  ],
+  "rate": {
+    "before": {
+      "free": 20,
+      "purchased": 0
+    },
+    "window_before": {
+      "used": 30,
+      "db_now_utc": "2026-10-26 15:59:09.497730",
+      "expires_at_utc": "2026-10-26 16:00:09.273683"
+    },
+    "seeded_count": 30,
+    "note": "Seed 30 attempts in isolated DB; wait real 60 seconds, do not alter expiry.",
+    "after_rejection": {
+      "free": 20,
+      "purchased": 0
+    },
+    "window_after_rejection": {
+      "used": 31,
+      "db_now_utc": "2026-10-26 15:59:09.743186",
+      "expires_at_utc": "2026-10-26 16:00:09.273683"
+    },
+    "after_expiry": {
+      "free": 19,
+      "purchased": 0
+    },
+    "window_after_expiry": {
+      "used": 1,
+      "db_now_utc": "2026-10-26 16:00:25.457867",
+      "expires_at_utc": "2026-10-26 16:01:10.432488"
+    },
+    "real_elapsed_ms": 76184,
+    "reply": "**Laptop Beta BETA49** hiện có giá là **23.456.789 VNĐ** với chính sách bảo hành lên đến **49 tháng**.\n\nBạn có cần thêm thông tin chi tiết về cấu hình của mẫu máy này không?",
+    "free_spent": 1
+  },
+  "lead": {
+    "id": "5128ccd4-f238-4274-ab63-56bc3b61cd83",
+    "request_id": "9ef2e6e4-7de7-4efd-a919-eaad8a621873",
+    "poll_ms": 13177
+  },
+  "worker": {
+    "document_id": "1c196094-70d8-4678-85ce-2588604fef34",
+    "error_type": "FileNotFoundError",
+    "final_status": "DONE",
+    "approval_status": "PENDING",
+    "chunks": 1,
+    "links": 0
+  },
+  "source_id": "ed8ba4f7a1801d4aa57a90a484d20393397db82dd9df48a4a8f798f7d2c05df7",
+  "passed": true,
+  "finished_at": "2026-10-26T16:00:25.471Z"
+}

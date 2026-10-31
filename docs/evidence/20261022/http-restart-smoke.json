@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "initial_reply_and_one_credit_debit",
+    "same_response_after_process_restart",
+    "no_second_gemini_call",
+    "balance_19_and_two_messages"
+  ],
+  "temporary_server_stopped": true,
+  "real_gemini_called": false
+}

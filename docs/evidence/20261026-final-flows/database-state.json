@@ -1,0 +1,68 @@
+{
+  "documents": [
+    {
+      "id": "1c196094-70d8-4678-85ce-2588604fef34",
+      "chunks": 1,
+      "status": "DONE",
+      "approval_status": "PENDING",
+      "organization_id": "bac945a3-01b2-4780-8873-3a865a819517"
+    },
+    {
+      "id": "7784cf8b-3d00-4448-9dbe-75ca950be59d",
+      "chunks": 1,
+      "status": "DONE",
+      "approval_status": "APPROVED",
+      "organization_id": "bac945a3-01b2-4780-8873-3a865a819517"
+    },
+    {
+      "id": "94a35416-0836-4a65-a758-27c75240d3a9",
+      "chunks": 1,
+      "status": "DONE",
+      "approval_status": "PENDING",
+      "organization_id": "da7a09d1-68c7-4390-b804-3e218394b04c"
+    },
+    {
+      "id": "b68af153-791f-4653-8875-ba086bcd1386",
+      "chunks": 1,
+      "status": "DONE",
+      "approval_status": "PENDING",
+      "organization_id": "da7a09d1-68c7-4390-b804-3e218394b04c"
+    },
+    {
+      "id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+      "chunks": 1,
+      "status": "DONE",
+      "approval_status": "APPROVED",
+      "organization_id": "da7a09d1-68c7-4390-b804-3e218394b04c"
+    }
+  ],
+  "leads": [
+    {
+      "id": "5128ccd4-f238-4274-ab63-56bc3b61cd83",
+      "status": "CONTACTED",
+      "organization_id": "bac945a3-01b2-4780-8873-3a865a819517"
+    },
+    {
+      "id": "ebf9777f-5381-4adf-82aa-ea14ce9d79fc",
+      "status": "CONTACTED",
+      "organization_id": "da7a09d1-68c7-4390-b804-3e218394b04c"
+    }
+  ],
+  "wallets": [
+    {
+      "free": 20,
+      "purchased": 0,
+      "organization_id": "13a6c6e9-3511-476f-99c4-b3e27a4bee5f"
+    },
+    {
+      "free": 4,
+      "purchased": 0,
+      "organization_id": "da7a09d1-68c7-4390-b804-3e218394b04c"
+    },
+    {
+      "free": 19,
+      "purchased": 0,
+      "organization_id": "bac945a3-01b2-4780-8873-3a865a819517"
+    }
+  ]
+}

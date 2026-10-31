@@ -12,10 +12,8 @@ if (-not $ForDeployment) {
 $targets = @(
     @{ Name = "backend"; Match = "uvicorn" },
     @{ Name = "document-worker"; Match = "app.workers.documents" },
-    @{ Name = "notification-worker"; Match = "app.workers.notifications" },
     @{ Name = "server-backend"; Match = "uvicorn" },
-    @{ Name = "server-document-worker"; Match = "app.workers.documents" },
-    @{ Name = "server-notification-worker"; Match = "app.workers.notifications" }
+    @{ Name = "server-document-worker"; Match = "app.workers.documents" }
 )
 
 foreach ($target in $targets) {

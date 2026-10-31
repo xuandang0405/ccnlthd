@@ -1,0 +1,18 @@
+{
+  "backend_image_id": "sha256:9a6cc39ff991f8335697032f82730623f4dd652a43961ca055b063251429a890",
+  "frontend_image_id": "sha256:aed1360e8a4cbf144a1152dea41053186e6d1cad6910603412bfb87f6dafd321",
+  "mysql_image_id": "sha256:24989179f58856db763f418010c1169fecc944e3ec1ea7e921572d83eb070f70",
+  "docker_python": "Python 3.12.15",
+  "mysql": "mysql  Ver 8.4.11 for Linux on x86_64 (MySQL Community Server - GPL)",
+  "model": "gemini-3.1-flash-lite",
+  "database": "ccnlthd_test_20261026_e2e",
+  "rate_limit_backend": "sql",
+  "base_url": "http://127.0.0.1:18026",
+  "gemini_timeout_seconds": "50",
+  "gemini_attempt_timeout_seconds": "10",
+  "email_enabled": false,
+  "sepay_configured": false,
+  "synthetic_data_only": true,
+  "pre_freeze_backend_image_id": "sha256:72df72e52090b9daf3ad57c6504e32b6aefe40b7a31e87ad43212a053a1715c7",
+  "final_image_tag": "ccnlthd-backend:acceptance-20261026-final"
+}

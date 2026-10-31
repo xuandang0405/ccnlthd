@@ -1,0 +1,99 @@
+{
+  "date": "2026-10-24",
+  "environment": "Isolated MySQL 8.4.11 test database; Windows Python 3.14.7; Edge; no external message or LLM call",
+  "checks": [
+    "Actual widget form -> 201 -> new customer visible without manual reload",
+    "Committed contact and authenticated session retained after controlled API restart",
+    "Other organization cannot see or modify the lead",
+    "Contacted action reduces NEW count only after successful API update; record retained",
+    "360px viewport has no horizontal overflow",
+    "Removed integration routes are 404 and absent from OpenAPI"
+  ],
+  "request_ids": [
+    {
+      "path": "/api/v1/auth/login",
+      "status": 200,
+      "request_id": "1a77d418-7c86-407a-a3c5-05acf553ad3a"
+    },
+    {
+      "path": "/api/v1/auth/me",
+      "status": 200,
+      "request_id": "c7ed4335-8086-4861-8762-48408d141b48"
+    },
+    {
+      "path": "/api/v1/auth/me",
+      "status": 200,
+      "request_id": "05e42902-7859-49fc-9a3e-2cfdb2962c2f"
+    },
+    {
+      "path": "/api/v1/chatbots",
+      "status": 200,
+      "request_id": "aa7583a1-ff99-4813-88fd-2f9320f2f5e1"
+    },
+    {
+      "path": "/api/v1/leads",
+      "status": 200,
+      "request_id": "b3b39349-a618-4e25-a22a-79caaf24311f"
+    },
+    {
+      "path": "/api/v1/dashboard/summary",
+      "status": 200,
+      "request_id": "6f27eab2-8aec-467c-b26c-9f3b48238679"
+    },
+    {
+      "path": "/api/v1/leads",
+      "status": 200,
+      "request_id": "e96586e3-5fba-43ac-a5f9-25c6e1dac1d8"
+    },
+    {
+      "path": "/api/v1/dashboard/summary",
+      "status": 200,
+      "request_id": "0ff1a383-7d05-41e0-8bba-4196984b7973"
+    },
+    {
+      "path": "/api/v1/auth/me",
+      "status": 200,
+      "request_id": "55b8ff5c-7577-485e-9652-1eab43ff6944"
+    },
+    {
+      "path": "/api/v1/chatbots",
+      "status": 200,
+      "request_id": "76798bc7-ccde-429c-91f3-aceb4e5dfdba"
+    },
+    {
+      "path": "/api/v1/leads",
+      "status": 200,
+      "request_id": "0c586fe1-c053-4721-936c-621591ea3bc5"
+    },
+    {
+      "path": "/api/v1/dashboard/summary",
+      "status": 200,
+      "request_id": "08cbea5b-5145-41c4-8040-92bf3f4d5f89"
+    },
+    {
+      "path": "/api/v1/leads/c40fabd8-8bf2-4a91-92b7-76efe29b79a3",
+      "status": 200,
+      "request_id": "e5c50071-9371-4f42-b172-4da65a43f5f9"
+    },
+    {
+      "path": "/api/v1/leads",
+      "status": 200,
+      "request_id": "86bbfb86-11ab-4c6e-83ee-ee75e164dc77"
+    },
+    {
+      "path": "/api/v1/dashboard/summary",
+      "status": 200,
+      "request_id": "9cba1946-6106-416e-8a7c-e469f915530d"
+    }
+  ],
+  "lead_request": {
+    "status": 201,
+    "request_id": "195114e5-8179-4756-90f7-209f26a1f612",
+    "lead_id": "c40fabd8-8bf2-4a91-92b7-76efe29b79a3"
+  },
+  "poll_observed_ms": 14760,
+  "cross_tenant_update": {
+    "status": 404,
+    "request_id": "563dda6f-d2d7-4034-aacc-afca03cf4f79"
+  }
+}

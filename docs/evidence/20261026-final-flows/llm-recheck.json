@@ -1,0 +1,212 @@
+{
+  "started_at": "2026-10-26T15:50:24.497Z",
+  "reason": "Separate recheck after provider 503/timeouts; initial results retained.",
+  "attempts": [
+    {
+      "id": "pending",
+      "attempt": 1,
+      "question": "Laptop Alpha PRIV37 có giá bao nhiêu và bảo hành thế nào?",
+      "request_id": "df2f779c-58a8-4632-b40e-96a7ad4d3e59",
+      "client_message_id": "2c4ec6c8-3e80-4416-8fc0-48dee5fa575e",
+      "status": 200,
+      "elapsed_ms": 43877,
+      "trace": {
+        "request_id": "df2f779c-58a8-4632-b40e-96a7ad4d3e59",
+        "model": "gemini-3.1-flash-lite",
+        "fallback": false,
+        "document_ids": [
+          "ce8cc8fc-5611-43d0-a07f-4021893f5f2c"
+        ],
+        "context_sha256": "8f30ed9733e5a8f3b6b749f13dccc93bcbe512fe9a61a3103766692a4e6eddb6"
+      },
+      "reply": "Hiện tại website chưa có thông tin về sản phẩm **Laptop Alpha PRIV37** mà bạn đang tìm kiếm.\n\nNếu bạn đang quan tâm đến các dòng laptop văn phòng hoặc học tập, bạn có thể tham khảo hai mẫu máy đang có sẵn tại cửa hàng:\n\n* **Laptop Acer Aspire 7 A715**: **19.890.000 VNĐ**, bảo hành **24 tháng**.\n* **Laptop Lenovo IdeaPad Slim 3**: **18.990.000 VNĐ**, bảo hành **12 tháng**.\n\nKhông biết nhu cầu sử dụng chính của bạn là làm việc văn phòng hay thiết kế đồ họa để mình tư vấn mẫu máy phù hợp hơn?",
+      "conversation_id": "a7c7c622-95b0-4652-97a6-dce22a0c335a",
+      "remaining_daily": 14,
+      "remaining_credits": 14,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "real_llm": true,
+      "passed": true,
+      "screenshot": "screenshots/recheck-pending-1.png"
+    },
+    {
+      "id": "approved",
+      "attempt": 1,
+      "question": "Laptop Alpha PRIV37 có giá bao nhiêu và bảo hành thế nào?",
+      "request_id": "9e8e4b4b-3135-429e-b73b-22a9473773ec",
+      "client_message_id": "6325d5c7-529a-4910-8833-ef387366faac",
+      "status": 200,
+      "elapsed_ms": 19071,
+      "trace": {
+        "request_id": "9e8e4b4b-3135-429e-b73b-22a9473773ec",
+        "model": "gemini-3.1-flash-lite",
+        "fallback": false,
+        "document_ids": [
+          "94a35416-0836-4a65-a758-27c75240d3a9",
+          "ce8cc8fc-5611-43d0-a07f-4021893f5f2c"
+        ],
+        "context_sha256": "ccb28b815372f59936a5fd1c1f31c11f40a5aff31307ee56609faa87763c108b"
+      },
+      "reply": "**Laptop Alpha PRIV37** hiện có giá là **14.321.987 VNĐ** với chính sách bảo hành lên đến **37 tháng**.\n\nBạn có cần thêm thông tin chi tiết về cấu hình của mẫu máy này không?",
+      "conversation_id": "a7c7c622-95b0-4652-97a6-dce22a0c335a",
+      "remaining_daily": 13,
+      "remaining_credits": 13,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "94a35416-0836-4a65-a758-27c75240d3a9",
+          "document_name": "restricted-alpha.xlsx"
+        },
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "real_llm": true,
+      "passed": true,
+      "screenshot": "screenshots/recheck-approved-1.png"
+    },
+    {
+      "id": "revoked",
+      "attempt": 1,
+      "question": "Laptop Alpha PRIV37 có giá bao nhiêu và bảo hành thế nào?",
+      "request_id": "7a49d925-9701-46ef-ba7a-4df75f50b401",
+      "client_message_id": "46e731af-c400-45b6-bf53-985ed8e4e633",
+      "status": 200,
+      "elapsed_ms": 26603,
+      "trace": {
+        "request_id": "7a49d925-9701-46ef-ba7a-4df75f50b401",
+        "model": "gemini-3.1-flash-lite",
+        "fallback": false,
+        "document_ids": [
+          "ce8cc8fc-5611-43d0-a07f-4021893f5f2c"
+        ],
+        "context_sha256": "8f30ed9733e5a8f3b6b749f13dccc93bcbe512fe9a61a3103766692a4e6eddb6"
+      },
+      "reply": "Hiện tại website chưa có thông tin về mẫu **Laptop Alpha PRIV37** mà bạn đang tìm kiếm.\n\nNếu bạn đang quan tâm đến các dòng laptop văn phòng hoặc học tập, bạn có thể tham khảo hai sản phẩm đang có sẵn tại cửa hàng:\n\n* **Laptop Acer Aspire 7 A715**: **19.890.000 VNĐ**, bảo hành **24 tháng**.\n* **Laptop Lenovo IdeaPad Slim 3**: **18.990.000 VNĐ**, bảo hành **12 tháng**.\n\nBạn có muốn mình tư vấn chi tiết hơn về cấu hình của hai mẫu máy này không?",
+      "conversation_id": "a7c7c622-95b0-4652-97a6-dce22a0c335a",
+      "remaining_daily": 12,
+      "remaining_credits": 12,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "real_llm": true,
+      "passed": true,
+      "screenshot": "screenshots/recheck-revoked-1.png"
+    },
+    {
+      "id": "other-tenant",
+      "attempt": 1,
+      "question": "Laptop Beta BETA49 có giá bao nhiêu và bảo hành thế nào?",
+      "request_id": "3e68d0f6-ac4f-476b-91ff-b6f59fbda37e",
+      "client_message_id": "42487f6e-512f-4491-a8fb-32f238daf3c3",
+      "status": 200,
+      "elapsed_ms": 4952,
+      "trace": {
+        "request_id": "3e68d0f6-ac4f-476b-91ff-b6f59fbda37e",
+        "model": "gemini-3.1-flash-lite",
+        "fallback": false,
+        "document_ids": [
+          "ce8cc8fc-5611-43d0-a07f-4021893f5f2c"
+        ],
+        "context_sha256": "8f30ed9733e5a8f3b6b749f13dccc93bcbe512fe9a61a3103766692a4e6eddb6"
+      },
+      "reply": "Hiện tại, website chưa có thông tin về mẫu **Laptop Beta BETA49** mà bạn đang tìm kiếm.\n\nNếu bạn đang quan tâm đến các dòng laptop văn phòng hoặc học tập, bạn có thể tham khảo hai sản phẩm đang có sẵn tại cửa hàng:\n\n* **Laptop Acer Aspire 7 A715**: **19.890.000 VNĐ**, bảo hành **24 tháng**.\n* **Laptop Lenovo IdeaPad Slim 3**: **18.990.000 VNĐ**, bảo hành **12 tháng**.\n\nKhông biết nhu cầu sử dụng chính của bạn là gì để mình tư vấn mẫu máy phù hợp hơn?",
+      "conversation_id": "a7c7c622-95b0-4652-97a6-dce22a0c335a",
+      "remaining_daily": 11,
+      "remaining_credits": 11,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": true,
+      "real_llm": true,
+      "passed": true,
+      "screenshot": "screenshots/recheck-other-tenant-1.png"
+    },
+    {
+      "id": "ui06",
+      "attempt": 1,
+      "question": "Mình có ngân sách tối đa 19 triệu, Laptop Acer Aspire 7 A715 giá và bảo hành thế nào, có phù hợp không?",
+      "request_id": "6688f495-5365-4f91-b16b-f9cc78562bac",
+      "client_message_id": "fbcb514f-7742-49cc-abbd-10207e11bdb4",
+      "status": 200,
+      "elapsed_ms": 35105,
+      "trace": {
+        "request_id": "6688f495-5365-4f91-b16b-f9cc78562bac",
+        "model": "gemini-3.1-flash-lite",
+        "fallback": true,
+        "document_ids": [
+          "ce8cc8fc-5611-43d0-a07f-4021893f5f2c"
+        ],
+        "context_sha256": "8f30ed9733e5a8f3b6b749f13dccc93bcbe512fe9a61a3103766692a4e6eddb6"
+      },
+      "reply": "Các mẫu không vượt ngân sách **19.000.000 VNĐ** trong dữ liệu truy xuất:\n\n- **Laptop Lenovo IdeaPad Slim 3**\n  + **Giá: 18.990.000 VNĐ**\n  + Bảo hành: 12 tháng\n\n*Hệ thống đang gặp sự cố khi xử lý dữ liệu. Vui lòng thử lại sau ít phút.*",
+      "conversation_id": "a7c7c622-95b0-4652-97a6-dce22a0c335a",
+      "remaining_daily": 11,
+      "remaining_credits": 11,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": false,
+      "real_llm": false,
+      "passed": false,
+      "screenshot": "screenshots/recheck-ui06-1.png"
+    },
+    {
+      "id": "ui06",
+      "attempt": 2,
+      "question": "Mình có ngân sách tối đa 19 triệu, Laptop Acer Aspire 7 A715 giá và bảo hành thế nào, có phù hợp không?",
+      "request_id": "e82336d3-4990-41d1-80c5-47795073ebdb",
+      "client_message_id": "340beade-dec2-4e53-a372-a9252eb01bd5",
+      "status": 200,
+      "elapsed_ms": 41441,
+      "trace": {
+        "request_id": "e82336d3-4990-41d1-80c5-47795073ebdb",
+        "model": "gemini-3.1-flash-lite",
+        "fallback": true,
+        "document_ids": [
+          "ce8cc8fc-5611-43d0-a07f-4021893f5f2c"
+        ],
+        "context_sha256": "8f30ed9733e5a8f3b6b749f13dccc93bcbe512fe9a61a3103766692a4e6eddb6"
+      },
+      "reply": "Các mẫu không vượt ngân sách **19.000.000 VNĐ** trong dữ liệu truy xuất:\n\n- **Laptop Lenovo IdeaPad Slim 3**\n  + **Giá: 18.990.000 VNĐ**\n  + Bảo hành: 12 tháng\n\n*Hệ thống đang gặp sự cố khi xử lý dữ liệu. Vui lòng thử lại sau ít phút.*",
+      "conversation_id": "a7c7c622-95b0-4652-97a6-dce22a0c335a",
+      "remaining_daily": 11,
+      "remaining_credits": 11,
+      "reset_at": null,
+      "sources": [
+        {
+          "document_id": "ce8cc8fc-5611-43d0-a07f-4021893f5f2c",
+          "document_name": "catalog-alpha.xlsx"
+        }
+      ],
+      "semantic_pass": false,
+      "real_llm": false,
+      "passed": false,
+      "screenshot": "screenshots/recheck-ui06-2.png"
+    }
+  ],
+  "conversation_id": "a7c7c622-95b0-4652-97a6-dce22a0c335a",
+  "passed": false,
+  "finished_at": "2026-10-26T15:54:04.818Z"
+}

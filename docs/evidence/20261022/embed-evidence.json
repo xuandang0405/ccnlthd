@@ -1,0 +1,20 @@
+{
+  "parent_origin": "http://127.0.0.1:18025",
+  "widget_origin": "http://127.0.0.1:18024",
+  "http_status": 200,
+  "request_id": "6ca1ea13-0c06-42ba-a054-2045589a3755",
+  "response": {
+    "reply": "Mình tìm thấy thông tin này trong dữ liệu của cửa hàng:\n\n- **Tai nghe Aurora AV17**\n  + **Giá: 789.000 VNĐ**\n  + Tình trạng: Còn hàng.\n  + Bảo hành: 12 tháng.\n\n*Gemini hiện chưa khả dụng nên thông tin trên được lấy trực tiếp từ dữ liệu đã cập nhật và lượt chat này không bị trừ.*",
+    "conversation_id": "e09ac435-8a90-4455-a0f4-71ab266f5a8e",
+    "remaining_daily": 20,
+    "remaining_credits": 20,
+    "reset_at": null,
+    "sources": [
+      {
+        "document_id": "e3f46dd8-372e-4b55-a87c-1b97556cea57",
+        "document_name": "Bang-gia-Aurora.docx"
+      }
+    ]
+  },
+  "iframe_loaded": true
+}

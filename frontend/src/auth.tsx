@@ -73,7 +73,7 @@ async function recoverSession(fallback: Tokens, forceRefresh = false) {
     configureApi(null, null);
     const next = await api<Tokens>("/auth/refresh", { method: "POST", body: { refresh_token: latest.refresh_token } });
     const resolved = await resolveSession(next);
-    // Save before releasing the cross-tab lock so other tabs see the rotated token.
+    // Lưu token mới trước khi nhả khóa để tab khác không dùng lại token cũ.
     saveSession(next);
     return { tokens: next, ...resolved };
   };
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearSession();
           configureApi(null, null);
         } else {
-          // Keep the refresh token during a temporary server outage so a reload can recover.
+          // Giữ refresh token khi server tạm lỗi để có thể khôi phục phiên sau khi tải lại.
           configureApi(saved.access_token, null);
         }
       } finally {
@@ -146,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
           setOrganizationId(null);
         } else {
-          // A temporary outage must not discard the still-valid in-memory session.
+          // Lỗi mạng tạm thời chưa đủ căn cứ để xóa phiên đang còn hạn.
           configureApi(tokens.access_token, organizationId);
         }
       }
@@ -206,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// Hook and provider intentionally share this module to keep session state private and in memory.
+// Đặt hook cùng provider để trạng thái phiên chỉ được quản lý trong module này.
 // eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const value = useContext(AuthContext);

@@ -66,7 +66,7 @@ function AttachmentView({
           alt={attachment.original_name}
           className="max-h-72 w-full object-contain bg-slate-50"
         />
-        <span className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono font-bold text-slate-700 border-t border-slate-200">
+        <span className="flex items-center gap-2 px-3 py-1.5 text-xs font-sans font-bold text-slate-700 border-t border-slate-200">
           <Image size={13} className="text-blue-600" />
           <span className="truncate">{attachment.original_name}</span>
           <span className="text-slate-400">({size})</span>
@@ -87,8 +87,8 @@ function AttachmentView({
         <FileIcon size={16} />
       </span>
       <span className="min-w-0">
-        <b className="block truncate text-xs font-mono">{attachment.original_name}</b>
-        <small className="text-slate-500 font-mono text-[10px]">
+        <b className="block truncate text-sm font-sans">{attachment.original_name}</b>
+        <small className="text-slate-500 font-sans text-xs">
           {file.isLoading ? "Đang tải dữ liệu..." : size}
         </small>
       </span>
@@ -115,22 +115,22 @@ export function TicketChat({
 
   if (tickets?.length === 0) {
     return (
-      <div className="card-swiss mt-6 p-12 text-center text-slate-500 font-mono text-xs">
-        CHƯA CÓ CUỘC TRÒ CHUYỆN HỖ TRỢ NÀO ĐƯỢC TẠO.
+      <div className="card-swiss mt-6 p-12 text-center text-slate-500 font-sans text-sm">
+        Chưa có cuộc trò chuyện hỗ trợ nào được tạo.
       </div>
     );
   }
 
   return (
-    <div className="card-swiss-strong mt-6 grid grid-cols-1 lg:grid-cols-[320px_1fr] min-h-[640px] bg-white">
-      {/* TICKET LIST SIDEBAR */}
+    <div className="ticket-workspace card-swiss-strong mt-6 grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)] bg-white">
+
       <aside className="border-b lg:border-b-0 lg:border-r border-slate-200 bg-slate-50 flex flex-col">
         <div className="border-b border-slate-200 px-4 py-3 bg-white flex items-center justify-between">
           <div>
             <h3 className="text-base font-semibold text-slate-900">
               Hộp thư hỗ trợ
             </h3>
-            <p className="text-xs text-slate-500">{tickets?.length ?? 0} cuộc trao đổi</p>
+            <p className="text-sm text-slate-500">{tickets?.length ?? 0} cuộc trao đổi</p>
           </div>
         </div>
 
@@ -151,7 +151,7 @@ export function TicketChat({
                     : "hover:bg-white bg-slate-50"
                 }`}
               >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center bg-[#e9eef8] text-xs font-bold text-[#2455c7]">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center bg-[#e9eef8] text-sm font-bold text-brand">
                   {(ticket.created_by_name || ticket.created_by_email || "U").slice(0, 1).toUpperCase()}
                 </span>
 
@@ -161,21 +161,21 @@ export function TicketChat({
                       {ticket.created_by_name || ticket.created_by_email || "Khách hàng"}
                     </b>
                     {unreadCount > 0 && (
-                      <span className="bg-red-600 text-white px-1.5 py-0.2 font-mono text-[10px] font-black">
+                      <span className="bg-red-600 text-white px-1.5 py-0.2 font-sans text-xs font-semibold">
                         {unreadCount}
                       </span>
                     )}
                   </div>
 
-                  <span className="block truncate text-[11px] text-slate-500 font-mono">
+                  <span className="block truncate text-xs text-slate-500 font-sans">
                     {ticket.organization_name || ticket.created_by_email}
                   </span>
 
-                  <span className="mt-1 block truncate text-xs font-bold text-slate-800">
+                  <span className="mt-1 block truncate text-sm font-bold text-slate-800">
                     {ticket.subject}
                   </span>
 
-                  <div className="mt-1 flex items-center justify-between gap-1 text-[10px] font-mono text-slate-400">
+                  <div className="mt-1 flex items-center justify-between gap-1 text-xs font-sans text-slate-400">
                     <span className="truncate max-w-[150px]">
                       {last?.message || "Tệp đính kèm"}
                     </span>
@@ -194,15 +194,14 @@ export function TicketChat({
         </div>
       </aside>
 
-      {/* SELECTED TICKET DETAIL & THREAD */}
       {selected ? (
         <section className="flex flex-col min-w-0 bg-white">
-          {/* TICKET HEADER */}
+
           <header className="border-b border-slate-200 p-4 bg-slate-50/70 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span
-                  className={`font-mono text-[10px] font-black px-2 py-0.5 border ${
+                  className={`font-sans text-xs font-semibold px-2 py-0.5 border ${
                     statusColors[selected.status]
                   }`}
                 >
@@ -210,25 +209,25 @@ export function TicketChat({
                 </span>
               </div>
 
-              <h3 className="font-black text-base text-slate-950 mt-1 font-sans">
+              <h3 className="font-semibold text-base text-slate-950 mt-1 font-sans">
                 {selected.subject}
               </h3>
 
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 text-xs text-slate-500">
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 text-sm text-slate-500">
                 <span>{selected.created_by_email || "Chưa có email"}</span>
                 <span>{selected.organization_name || "—"}</span>
               </div>
-              <details className="mt-2 text-xs text-slate-500"><summary className="cursor-pointer">Mã yêu cầu</summary><code className="mt-1 block select-all break-all">{selected.id}</code></details>
+              <details className="mt-2 text-sm text-slate-500"><summary className="cursor-pointer">Mã yêu cầu</summary><code className="mt-1 block select-all break-all">{selected.id}</code></details>
             </div>
 
-            {/* STATUS SELECTOR (ADMIN ONLY) */}
             {onStatus && viewer === "ADMIN" && (
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">Trạng thái:</span>
+                <span className="text-sm text-slate-500">Trạng thái:</span>
                 <select
+                  aria-label="Trạng thái yêu cầu hỗ trợ"
                   value={selected.status}
                   onChange={(e) => onStatus(selected, e.target.value as SupportTicket["status"])}
-                  className="input-swiss text-xs font-mono py-1 px-2.5 bg-white font-bold"
+                  className="input-swiss text-sm font-sans py-1 px-2.5 bg-white font-bold"
                 >
                   <option value="OPEN">Mới · chờ xử lý</option>
                   <option value="IN_PROGRESS">Đang hỗ trợ</option>
@@ -239,7 +238,6 @@ export function TicketChat({
             )}
           </header>
 
-          {/* MESSAGE THREAD */}
           <div className="flex-1 space-y-4 overflow-y-auto p-5 bg-[#F8FAFC] max-h-[460px]">
             {selected.messages.map((message, idx) => {
               const isOwn = message.sender_type === viewer;
@@ -250,7 +248,7 @@ export function TicketChat({
                     isOwn ? "ml-auto" : "mr-auto"
                   }`}
                 >
-                  <div className="flex items-center gap-2 mb-1 px-1 text-xs text-slate-500 font-semibold">
+                  <div className="flex items-center gap-2 mb-1 px-1 text-sm text-slate-500 font-semibold">
                     <span>{message.sender_name}</span>
                     <span className="text-slate-400">
                       {new Date(message.created_at).toLocaleTimeString("vi-VN", { hour12: false })}{" "}
@@ -285,7 +283,6 @@ export function TicketChat({
             })}
           </div>
 
-          {/* REPLY COMPOSER */}
           {selected.status !== "CLOSED" ? (
             <footer className="border-t border-slate-200 p-4 bg-white">
               <div className="flex items-end gap-2">
@@ -295,10 +292,11 @@ export function TicketChat({
                 >
                   <Paperclip size={18} />
                   <input
+                    aria-label="Đính kèm ảnh hoặc tài liệu hỗ trợ"
                     type="file"
                     multiple
                     accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.csv,.doc,.docx,.xls,.xlsx,.zip"
-                    className="hidden"
+                    className="sr-only"
                     onChange={(e) => {
                       onFilesChange(Array.from(e.target.files ?? []).slice(0, 5));
                       e.target.value = "";
@@ -307,6 +305,7 @@ export function TicketChat({
                 </label>
 
                 <textarea
+                  aria-label="Tin nhắn hỗ trợ"
                   value={reply}
                   onChange={(e) => onReplyChange(e.target.value)}
                   rows={2}
@@ -321,41 +320,42 @@ export function TicketChat({
                   disabled={sending || (!reply.trim() && files.length === 0)}
                   className="btn-swiss-primary px-4"
                 >
-                  Gửi
+                  {sending ? "Đang gửi..." : "Gửi"}
                 </button>
               </div>
 
               {files.length > 0 && (
-                <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs font-mono">
-                  <span className="text-slate-500 uppercase">Tệp đính kèm:</span>
+                <div className="mt-2.5 flex flex-wrap items-center gap-2 text-sm font-sans">
+                  <span className="text-slate-500 normal-case">Tệp đính kèm:</span>
                   {files.map((item) => (
                     <span
                       key={`${item.name}-${item.size}`}
-                      className="bg-blue-50 border border-blue-200 text-blue-900 px-2 py-0.5 text-[11px] inline-flex items-center gap-1"
+                      className="bg-blue-50 border border-blue-200 text-blue-900 px-2 py-0.5 text-xs inline-flex items-center gap-1"
                     >
                       <Paperclip size={10} />
                       <span className="truncate max-w-xs">{item.name}</span>
+                      <button type="button" className="ml-1 underline" aria-label={`Bỏ tệp ${item.name}`} onClick={() => onFilesChange(files.filter((file) => file !== item))}>Bỏ</button>
                     </span>
                   ))}
                   <button
                     type="button"
                     onClick={() => onFilesChange([])}
-                    className="text-red-600 hover:underline font-bold text-[11px] ml-1"
+                    className="text-red-600 hover:underline font-bold text-xs ml-1"
                   >
-                    [BỎ TẤT CẢ]
+                    [bỏ tất cả]
                   </button>
                 </div>
               )}
             </footer>
           ) : (
-            <div className="border-t border-slate-200 p-4 bg-slate-100 text-center font-mono text-xs text-slate-500">
-              TICKET ĐÃ ĐÓNG. LIÊN HỆ QUẢN TRỊ VIÊN ĐỂ MỞ LẠI NẾU CẦN HỖ TRỢ THÊM.
+            <div className="border-t border-slate-200 p-4 bg-slate-100 text-center font-sans text-sm text-slate-500">
+              Ticket đã đóng. liên hệ quản trị viên để mở lại nếu cần hỗ trợ thêm.
             </div>
           )}
         </section>
       ) : (
-        <div className="p-12 text-center text-slate-400 font-mono text-xs">
-          CHỌN MỘT TICKET TỪ CỘT TRÁI ĐỂ XEM NỘI DUNG.
+        <div className="p-12 text-center text-slate-400 font-sans text-sm">
+          Chọn một ticket từ cột trái để xem nội dung.
         </div>
       )}
     </div>

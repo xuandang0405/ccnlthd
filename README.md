@@ -1,55 +1,52 @@
-# AI Sales Assistant SaaS
+# Trợ lý Việt
 
-Nền tảng trợ lý bán hàng đa doanh nghiệp bằng FastAPI, React, MongoDB Atlas và Google Gemini. Source hiện có luồng đăng ký/đăng nhập, cách ly tenant, chatbot, kho tài liệu PDF/DOCX/XLSX, worker bền qua restart, widget khách truy cập, hội thoại, lead, quota, đơn thanh toán VietQR/SePay, kích hoạt subscription và trang super admin.
+Website cho thuê và quản lý chatbot tư vấn bán hàng. Người dùng tải tài liệu sản phẩm, tạo chatbot và nhúng vào website của mình.
 
-Triển khai Windows dùng Cloudflare Tunnel tới FastAPI chỉ bind trên localhost; domain cần khớp với `backend/.env` và cấu hình Tunnel của máy triển khai. Dữ liệu nghiệp vụ và bộ đếm quota/rate-limit nằm trên MongoDB Atlas. Xem [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+## Công nghệ
 
-## Khởi động server trên Windows
+- Backend: FastAPI, Pydantic, SQLAlchemy và Alembic.
+- Frontend: React, TypeScript, Vite và Tailwind CSS.
+- Database: MySQL 8.4.
+- Tích hợp: Gemini, thanh toán VietQR/SePay và Docker Compose.
 
-Nhấp đúp [run.bat](run.bat) để chạy backend FastAPI, worker tài liệu và worker thông báo. Frontend production đã build được FastAPI phục vụ trực tiếp; không cần Docker hoặc một tiến trình frontend riêng.
+## Chức năng chính
 
-`run.bat` dọn các PID cũ của chính dự án trước khi chạy và hiển thị toàn bộ log trong cùng cửa sổ. Phải giữ cửa sổ này mở để website hoạt động; nhấn `Ctrl+C` hoặc đóng cửa sổ để dừng server. Dự án không còn tự khởi động khi đăng nhập Windows.
+- Đăng ký, đăng nhập và phân quyền người dùng/admin.
+- Tạo chatbot, tải tài liệu và duyệt tài liệu trước khi sử dụng.
+- Chat tư vấn, xem hội thoại và quản lý khách hàng tiềm năng.
+- Mua lượt chat, phân bổ lượt cho chatbot và thanh toán bằng QR.
+- Gửi yêu cầu hỗ trợ kèm ảnh hoặc tệp.
 
-Để triển khai production-like bằng Docker:
+## Chạy bằng Docker
 
-```powershell
-Copy-Item .env.example .env
-# Điền MONGODB_URI, secret, domain và các tích hợp thật.
-docker compose up -d --build
-docker compose ps
-```
+1. Mở Docker Desktop ở chế độ Linux containers.
+2. Chạy file `run-docker.bat`.
+3. Mở http://127.0.0.1:8080.
 
-Backend tự kiểm tra kết nối và index MongoDB khi khởi động. Truy cập `https://APP_DOMAIN/`; health tại `/health/live` và `/health/ready`.
+Lần đầu chạy, script tạo `.env.docker`. Cập nhật khóa tích hợp trong file này nếu cần dùng Gemini hoặc SePay.
 
-Chi tiết cài đặt không Docker nằm tại [docs/INSTALLATION.md](docs/INSTALLATION.md). [docs/REPORT_ALIGNMENT.md](docs/REPORT_ALIGNMENT.md) là bản đối chiếu với báo cáo ở giai đoạn trước, không thay cho tài liệu vận hành hiện tại.
+Dừng bằng `Ctrl+C` hoặc `stop-docker.bat`. Hướng dẫn chi tiết: [Chạy Docker](docs/DOCKER.md).
 
-API và ví dụ dependency/async nằm tại [docs/API.md](docs/API.md). Quy trình kiểm thử, tập đánh giá truy xuất AI và các giới hạn kiểm chứng nằm tại [docs/QUALITY.md](docs/QUALITY.md).
+## Chạy không dùng Docker
 
-## Những gì chưa được xác minh trên máy này
+Cài Python, Node.js và MySQL, sau đó cấu hình theo [hướng dẫn cài đặt](docs/INSTALLATION.md).
 
-- Gemini thật cần theo dõi quota và lỗi của model trong quá trình vận hành.
-- Telegram thật: có luồng challenge xác minh destination và worker retry hữu hạn, nhưng chưa có Bot Token/destination thật để kiểm chứng gửi.
-- SePay webhook thật vẫn cần đối soát một giao dịch ngân hàng thực tế.
-- Restore MongoDB cần được diễn tập định kỳ trên database tách biệt.
+Khi đã cài đặt xong, chạy `run.bat` và mở http://127.0.0.1:8000. Giữ cửa sổ chạy mở, nhấn `Ctrl+C` để dừng.
 
-Không coi bản này đủ điều kiện production trước khi hoàn tất checklist trong [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+## Các trang
 
-## Kiểm thử local
+Thêm đường dẫn sau vào địa chỉ website đang chạy:
 
-```powershell
-cd backend
-py -3.12 -m venv .venv
-.\.venv\Scripts\pip.exe install -e ".[dev]"
-.\.venv\Scripts\ruff.exe check app tests
-# Chỉ chạy pytest với MongoDB replica set dành riêng cho test.
-.\.venv\Scripts\pytest.exe --cov=app
+- `/`: Trang chủ.
+- `/login`: Đăng nhập.
+- `/app`: Quản lý của người dùng.
+- `/admin`: Quản trị, cần tài khoản admin.
+- `/widget-test.html`: Thử nhúng chatbot.
+- `/docs`: Swagger API khi chạy ở môi trường development.
 
-cd ..\frontend
-npm ci
-npm run lint
-npm test
-npm run build
-npm audit --omit=dev
-```
+## Tài liệu
 
-Không commit `.env`, API key, token, thông tin ngân hàng hoặc dữ liệu khách hàng. Chỉ push sau khi chủ dự án xác nhận.
+- [Hướng dẫn đọc code](docs/CODE_MAP_FOR_TEAM.md).
+- [Hướng dẫn sửa frontend](frontend/HUONG_DAN_CHINH_SUA_FRONTEND.md).
+- [Database](docs/DATABASE.md) và [schema MySQL](database/schema_mysql.sql).
+- [Kiểm thử](docs/QUALITY.md) và [workflow CI](.github/workflows/ci.yml).

@@ -1,0 +1,130 @@
+{
+  "scope": "standalone_fake_dependency_no_database",
+  "requests": [
+    {
+      "path": "/cached",
+      "status": 200,
+      "body": {
+        "same_instance": true
+      },
+      "events": [
+        "shared enter",
+        "left",
+        "right",
+        "endpoint",
+        "shared exit"
+      ]
+    },
+    {
+      "path": "/uncached",
+      "status": 200,
+      "body": {
+        "same_instance": false
+      },
+      "events": [
+        "shared enter",
+        "shared enter",
+        "endpoint",
+        "shared exit",
+        "shared exit"
+      ]
+    },
+    {
+      "path": "/cached",
+      "status": 200,
+      "body": {
+        "same_instance": true
+      },
+      "events": [
+        "shared enter",
+        "left",
+        "right",
+        "endpoint",
+        "shared exit"
+      ]
+    },
+    {
+      "path": "/async-thread",
+      "status": 200,
+      "body": {
+        "thread": "MainThread",
+        "thread_id": 20080
+      },
+      "events": []
+    },
+    {
+      "path": "/sync-thread",
+      "status": 200,
+      "body": {
+        "thread": "AnyIO worker thread",
+        "thread_id": 9672
+      },
+      "events": []
+    }
+  ],
+  "invalid_input": {
+    "status": 422,
+    "body": {
+      "detail": [
+        {
+          "type": "int_parsing",
+          "loc": [
+            "body",
+            "quantity"
+          ],
+          "msg": "Input should be a valid integer, unable to parse string as an integer",
+          "input": "not-an-integer"
+        }
+      ]
+    }
+  },
+  "application_graph_read_only": {
+    "name": "send_message",
+    "use_cache": true,
+    "scope": "function",
+    "children": [
+      {
+        "name": "get_db",
+        "use_cache": true,
+        "scope": "function",
+        "children": []
+      },
+      {
+        "name": "get_redis",
+        "use_cache": true,
+        "scope": null,
+        "children": []
+      },
+      {
+        "name": "get_gemini_service",
+        "use_cache": true,
+        "scope": null,
+        "children": []
+      }
+    ]
+  },
+  "python": "3.14.7 (tags/v3.14.7:823f032, Aug  5 2026, 10:51:32) [MSC v.1944 64 bit (AMD64)]",
+  "versions": {
+    "fastapi": "0.141.1",
+    "starlette": "1.6.0",
+    "pydantic": "2.13.5",
+    "pydantic-core": "2.46.5",
+    "sqlalchemy": "2.0.54",
+    "aiomysql": "0.3.2",
+    "alembic": "1.20.0"
+  },
+  "framework_sources": {
+    "run_endpoint_function": {
+      "file": "D:\\QUAN TRỌNG\\CCNLTHD\\source\\backend\\.venv\\Lib\\site-packages\\fastapi\\routing.py",
+      "line": 344
+    },
+    "solve_dependencies": {
+      "file": "D:\\QUAN TRỌNG\\CCNLTHD\\source\\backend\\.venv\\Lib\\site-packages\\fastapi\\dependencies\\utils.py",
+      "line": 586
+    },
+    "run_in_threadpool": {
+      "file": "D:\\QUAN TRỌNG\\CCNLTHD\\source\\backend\\.venv\\Lib\\site-packages\\starlette\\concurrency.py",
+      "line": 32
+    }
+  }
+}

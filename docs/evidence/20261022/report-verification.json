@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-22",
+  "report": "Nhóm 3 - Báo cáo FastAPI - Hoàn thiện 22-10-2026.docx",
+  "sha256": "f7dfff335d7f9a78e5cdb887407022d478eb2eac753d4d75e7453c86aacecdb2",
+  "pages": 220,
+  "native_tocs": 3,
+  "pageref_count": 424,
+  "pageref_mismatches": 0,
+  "all_pages_visually_reviewed": true,
+  "unchanged_page_pngs_matched_to_prior_review": 143,
+  "changed_pages_reviewed_after_last_edit": 77,
+  "native_word_body_font": "Times New Roman 13 pt, not bold",
+  "code_font": "Consolas",
+  "table_borders": "black single lines",
+  "demo_images_replaced": 24,
+  "original_report_and_cover_preserved": true,
+  "rendering_note": "Word Page.EnhMetaFileBits PNG previews distort some glyphs/borders. The suspect API table on page 212 was also exported through native Word PDF and visually verified: full paths and black borders are intact."
+}

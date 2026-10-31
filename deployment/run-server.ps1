@@ -40,6 +40,3 @@ Start-ServerProcess "server-backend" @(
     "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"
 ) "uvicorn"
 Start-ServerProcess "server-document-worker" @("-m", "app.workers.documents") "app.workers.documents"
-Start-ServerProcess "server-notification-worker" @(
-    "-m", "app.workers.notifications"
-) "app.workers.notifications"

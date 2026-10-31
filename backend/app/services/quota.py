@@ -2,8 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from pymongo.errors import PyMongoError
 from redis.exceptions import RedisError
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.redis import RedisLike
 
@@ -47,7 +47,7 @@ class QuotaService:
         key = f"quota:organization:{organization_id}:date:{now.date().isoformat()}"
         try:
             used = int(await self.redis.eval(INCREMENT_SCRIPT, 1, key, ttl))
-        except (RedisError, PyMongoError) as exc:
+        except (RedisError, SQLAlchemyError) as exc:
             raise QuotaUnavailableError("Không thể kiểm tra quota lúc này") from exc
         remaining = None if limit is None else max(0, limit - used)
         return QuotaResult(used=used, limit=limit, remaining=remaining, reset_at=reset_at)
@@ -56,6 +56,6 @@ class QuotaService:
         key = f"rate:visitor:{session_id}:minute"
         try:
             used = int(await self.redis.eval(INCREMENT_SCRIPT, 1, key, 60))
-        except (RedisError, PyMongoError) as exc:
+        except (RedisError, SQLAlchemyError) as exc:
             raise QuotaUnavailableError("Không thể kiểm tra giới hạn chống spam") from exc
         return used

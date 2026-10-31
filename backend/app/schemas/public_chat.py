@@ -1,5 +1,5 @@
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -14,6 +14,7 @@ class VisitorSessionResponse(BaseModel):
 
 class PublicChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+    client_message_id: UUID = Field(default_factory=uuid4)
 
     @field_validator("message")
     @classmethod

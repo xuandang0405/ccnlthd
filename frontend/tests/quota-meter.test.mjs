@@ -41,6 +41,6 @@ test("quota component renders the current plan and upgrade action", () => {
     React.createElement(QuotaMeter, { remaining: 20, planName: "FREE", onUpgradeClick: () => {} })
   );
   assert.match(html, /Gói hiện tại: FREE/);
-  assert.match(html, /MUA THÊM LƯỢT/);
+  assert.match(html, /Mua thêm lượt/);
   assert.doesNotMatch(html, /role="status"/);
 });

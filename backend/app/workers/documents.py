@@ -2,14 +2,23 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
 from anyio import to_thread
+from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
-from app.core.mongodb import close_mongo_client, get_mongo_database, new_document, record
+from app.core.database import SessionFactory, engine
+from app.core.records import add_records, make_record, update_record
 from app.integrations.gemini import GeminiServiceError
-from app.models.entities import DocumentStatus
+from app.models.entities import (
+    ChatbotDocument,
+    Document,
+    DocumentChunk,
+    DocumentChunkToken,
+    DocumentStatus,
+    SystemSetting,
+)
 from app.services.document_links import (
     backfill_document_links,
     link_document_to_chatbots,
@@ -23,32 +32,32 @@ logger = logging.getLogger("document-worker")
 settings = get_settings()
 
 
-async def claim_document(db: Any):
+async def claim_document(db: AsyncSession):
     now = datetime.now(UTC)
-    document = await db.documents.find_one_and_update(
-        {
-            "$or": [
-                {"status": DocumentStatus.UPLOADED.value},
-                {
-                    "status": DocumentStatus.PROCESSING.value,
-                    "updated_at": {"$lt": now - timedelta(minutes=15)},
-                },
-            ]
+    document = await update_record(
+        db,
+        Document,
+        (
+            or_(
+                (Document.status == DocumentStatus.UPLOADED.value),
+                and_(
+                    Document.status == DocumentStatus.PROCESSING.value,
+                    Document.updated_at < now - timedelta(minutes=15),
+                ),
+            )
+        ),
+        values={
+            "status": DocumentStatus.PROCESSING.value,
+            "processing_error": None,
+            "updated_at": now,
         },
-        {
-            "$set": {
-                "status": DocumentStatus.PROCESSING.value,
-                "processing_error": None,
-                "updated_at": now,
-            }
-        },
-        sort=[("created_at", 1)],
-        return_document=True,
+        order_by=(Document.created_at.asc(),),
     )
-    return record(document)
+    return document
 
 
-async def process(db: Any, document: Any) -> None:
+async def process(db: AsyncSession, document: Document) -> None:
+    document_id = document.id
     try:
         path = settings.upload_dir / document.storage_key
         extension = Path(document.original_name).suffix.lower()
@@ -60,7 +69,12 @@ async def process(db: Any, document: Any) -> None:
             settings.document_max_cells,
         )
         pieces = chunks(text)
-        moderation = await db.system_settings.find_one({"_id": "document_moderation"})
+        moderation = await db.scalar(
+            select(SystemSetting)
+            .where(SystemSetting.id == "document_moderation")
+            .limit(1)
+            .execution_options(populate_existing=True)
+        )
         auto_review = bool(moderation.get("auto_review", False)) if moderation else False
         review = None
         approval_note = "Chờ Admin duyệt tài liệu"
@@ -72,16 +86,23 @@ async def process(db: Any, document: Any) -> None:
                 logger.warning("AI review failed document_id=%s: %s", document.id, exc)
                 approval_note = "AI chưa kiểm tra được; chờ Admin duyệt tay"
         if review and review.passed:
-            current_setting = await db.system_settings.find_one({"_id": "document_moderation"})
+            current_setting = await db.scalar(
+                select(SystemSetting)
+                .where(SystemSetting.id == "document_moderation")
+                .limit(1)
+                .execution_options(populate_existing=True)
+            )
             auto_review = bool(current_setting and current_setting.get("auto_review"))
             if not auto_review:
                 approval_note = "Đã tắt duyệt AI; chờ Admin duyệt tay"
         approval_status = "APPROVED" if auto_review and review and review.passed else "PENDING"
-        await db.document_chunks.delete_many({"document_id": document.id})
+        await db.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document.id))
         if pieces:
-            await db.document_chunks.insert_many(
+            await add_records(
+                db,
+                DocumentChunk,
                 [
-                    new_document(
+                    make_record(
                         organization_id=document.organization_id,
                         document_id=document.id,
                         chunk_index=index,
@@ -90,25 +111,42 @@ async def process(db: Any, document: Any) -> None:
                         search_tokens=search_tokens(content),
                     )
                     for index, content in enumerate(pieces)
-                ]
+                ],
             )
-        await db.documents.update_one(
-            {"_id": document.id},
-            {
-                "$set": {
-                    "extracted_text": text[:200_000],
-                    "extracted_char_count": len(text),
-                    "chunk_count": len(pieces),
-                    "status": DocumentStatus.DONE.value,
-                    "processing_error": None,
-                    "approval_status": approval_status,
-                    "approval_note": approval_note,
-                    "ai_review": review.as_dict() if review else None,
-                    "approved_at": datetime.now(UTC) if approval_status == "APPROVED" else None,
-                    "approved_by_user_id": None,
-                    "updated_at": datetime.now(UTC),
+        indexed_chunks = (
+            await db.scalars(select(DocumentChunk).where(DocumentChunk.document_id == document.id))
+        ).all()
+        token_rows = []
+        for chunk in indexed_chunks:
+            for token in set(chunk.search_tokens):
+                if len(token) <= 100:
+                    token_rows.append(DocumentChunkToken(chunk_id=chunk.id, token=token))
+                if len(token_rows) >= 1000:
+                    db.add_all(token_rows)
+                    await db.flush()
+                    token_rows = []
+        db.add_all(token_rows)
+        await db.flush()
+        await db.execute(
+            update(Document)
+            .where(Document.id == document.id)
+            .values(
+                **{
+                    **{
+                        "extracted_text": text[:200_000],
+                        "extracted_char_count": len(text),
+                        "chunk_count": len(pieces),
+                        "status": DocumentStatus.DONE.value,
+                        "processing_error": None,
+                        "approval_status": approval_status,
+                        "approval_note": approval_note,
+                        "ai_review": review.as_dict() if review else None,
+                        "approved_at": datetime.now(UTC) if approval_status == "APPROVED" else None,
+                        "approved_by_user_id": None,
+                        "updated_at": datetime.now(UTC),
+                    }
                 }
-            },
+            )
         )
         linked = (
             await link_document_to_chatbots(
@@ -116,10 +154,13 @@ async def process(db: Any, document: Any) -> None:
                 organization_id=document.organization_id,
                 document_id=document.id,
             )
-            if approval_status == "APPROVED" else 0
+            if approval_status == "APPROVED"
+            else 0
         )
         if approval_status != "APPROVED":
-            await db.chatbot_documents.delete_many({"document_id": document.id})
+            await db.execute(
+                delete(ChatbotDocument).where(ChatbotDocument.document_id == document.id)
+            )
         logger.info(
             "Processed document_id=%s chunks=%s chatbot_links_added=%s",
             document.id,
@@ -127,37 +168,44 @@ async def process(db: Any, document: Any) -> None:
             linked,
         )
     except Exception as exc:
-        logger.exception("Document processing failed document_id=%s", document.id)
-        await db.documents.update_one(
-            {"_id": document.id},
-            {
-                "$set": {
-                    "status": DocumentStatus.FAILED.value,
-                    "processing_error": f"{type(exc).__name__}: {str(exc)[:300]}",
-                    "updated_at": datetime.now(UTC),
+        logger.exception("Document processing failed document_id=%s", document_id)
+        await db.rollback()
+        await db.execute(
+            update(Document)
+            .where(Document.id == document_id)
+            .values(
+                **{
+                    **{
+                        "status": DocumentStatus.FAILED.value,
+                        "processing_error": f"{type(exc).__name__}: {str(exc)[:300]}",
+                        "updated_at": datetime.now(UTC),
+                    }
                 }
-            },
+            )
         )
 
 
 async def run() -> None:
     logger.info("Document worker started")
-    db = get_mongo_database()
     try:
-        moderation = await db.system_settings.find_one({"_id": "document_moderation"})
-        if not moderation or not moderation.get("auto_review", False):
-            revoked = await revoke_auto_approvals(db)
-            logger.info("Auto-approved documents returned to review queue count=%s", revoked)
-        linked = await backfill_document_links(db)
-        logger.info("Document link backfill completed links_added=%s", linked)
+        async with SessionFactory.begin() as db:
+            moderation = await db.get(SystemSetting, "document_moderation")
+            if not moderation or not moderation.auto_review:
+                revoked = await revoke_auto_approvals(db)
+                logger.info("Auto-approved documents returned to review queue count=%s", revoked)
+            linked = await backfill_document_links(db)
+            logger.info("Document link backfill completed links_added=%s", linked)
         while True:
-            document = await claim_document(db)
+            async with SessionFactory() as db:
+                document = await claim_document(db)
+                await db.commit()
+                if document is not None:
+                    await process(db, document)
+                    await db.commit()
             if document is None:
                 await asyncio.sleep(2)
-                continue
-            await process(db, document)
     finally:
-        await close_mongo_client()
+        await engine.dispose()
 
 
 if __name__ == "__main__":

@@ -1,65 +1,47 @@
-# Cài đặt trên Windows không dùng Docker
+# Cài đặt trên Windows, không cần Docker
 
-Luồng vận hành hiện tại: `run.bat` giữ FastAPI và hai worker chạy trong cửa sổ lệnh; FastAPI phục vụ luôn bản build React tại `frontend/dist`. MongoDB Atlas lưu dữ liệu nghiệp vụ và bộ đếm lượt dùng. Không cần chạy Vite riêng sau khi build.
+Máy có Docker có thể dùng [hướng dẫn Docker](DOCKER.md) và `run-docker.bat`, không cần các bước cài Python/Node/MySQL dưới đây trên máy host. Hai chế độ sử dụng database riêng, không tự chuyển dữ liệu.
+
+Backend FastAPI và worker tài liệu chạy trong cửa sổ `run.bat`. Frontend production tại `frontend/dist` được FastAPI phục vụ trực tiếp. SQLAlchemy + MySQL/MariaDB lưu dữ liệu; không cần MongoDB hoặc Redis riêng nếu dùng RATE_LIMIT_BACKEND=sql.
 
 ## Yêu cầu
 
-- Python 3.12 (kiểm tra bằng `py -0p`) và Node.js 22 + npm.
-- Tài khoản MongoDB Atlas có quyền đọc/ghi và IP của máy chủ được cho phép truy cập. MongoDB phải hỗ trợ transaction/replica set.
-- Internet để cài dependency, kết nối Atlas và gọi Gemini khi dùng tính năng AI.
-- Cloudflare Tunnel/DNS/HTTPS chỉ cần khi muốn truy cập từ Internet; chạy local không cần chúng.
+- Python 3.12 trở lên; tạo lại .venv trên từng máy, không chép môi trường máy cũ.
+- Node.js 22 để cài/build frontend.
+- MySQL 8 hoặc MariaDB tương thích; trên máy local đã kiểm thử MariaDB 10.4.32.
+- backend/.env có cấu hình local hoặc server phù hợp; giữ bí mật khóa tích hợp.
 
-## Cài đặt lần đầu
+## Chuẩn bị
 
-Mở PowerShell tại thư mục `source`:
+Nhập `database/schema_mysql.sql` vào database trống theo [hướng dẫn MySQL](../database/HUONG_DAN_MYSQL.md). Hoặc dùng Alembic để tạo schema, không cần làm cả hai.
 
-```powershell
-py -3.12 -m venv .\backend\.venv
-.\backend\.venv\Scripts\python.exe -m pip install -e .\backend
-npm ci --prefix .\frontend
-npm run build --prefix .\frontend
-Copy-Item .\.env.example .\backend\.env
-```
-
-Nếu chép dự án từ máy khác và `.venv` vẫn chỉ về đường dẫn Python trên máy cũ, hãy **đổi tên thư mục `.venv` cũ để giữ bản dự phòng**, rồi tạo lại bằng lệnh ở trên. Không sao chép virtual environment giữa hai máy.
-
-Mở `backend/.env` và điền tối thiểu:
-
-```dotenv
-APP_ENV=production
-APP_PUBLIC_URL=http://127.0.0.1:8000
-FRONTEND_ORIGIN=http://127.0.0.1:8000
-APP_DOMAIN=127.0.0.1
-DATABASE_BACKEND=mongodb
-MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority
-MONGODB_DATABASE=ai_sales_assistant
-RATE_LIMIT_BACKEND=mongodb
-UPLOAD_DIR=storage/uploads
-APP_SECRET_KEY=<chuoi-ngau-nhien-toi-thieu-32-ky-tu>
-```
-
-Nếu dùng domain HTTPS thật, thay ba giá trị `APP_PUBLIC_URL`, `FRONTEND_ORIGIN`, `APP_DOMAIN` bằng URL/domain đó; `APP_DOMAIN` chỉ chứa tên host, không chứa `https://`. Điền thêm `GEMINI_API_KEY` và cấu hình SePay/ngân hàng nếu cần thử các tích hợp này. Không đưa `backend/.env` lên Git hoặc gửi cho người khác.
-
-Kiểm tra kết nối Atlas trước khi chạy:
+Trong PowerShell mở tại thư mục source:
 
 ```powershell
-Push-Location .\backend
-.\.venv\Scripts\python.exe ..\deployment\prepare-mongodb.py
-Pop-Location
+py -3.12 -m venv backend/.venv
+.\backend\.venv\Scripts\python.exe -m pip install -e ".\backend[dev]"
+npm.cmd ci --prefix frontend
+npm.cmd run build --prefix frontend
+cd backend
+.\.venv\Scripts\python.exe ..\deployment\prepare-mysql.py
+cd ..
+.\run.bat
 ```
 
-Nhấp đúp `run.bat`, giữ cửa sổ mở, rồi vào `http://127.0.0.1:8000/`. Kiểm tra `http://127.0.0.1:8000/health/ready` trả về `status: ready`. Đóng cửa sổ hoặc nhấn Ctrl+C sẽ dừng server. `run.bat` không tự cài dependency hay build frontend. Các link domain in sẵn trong cửa sổ `run.bat` là cấu hình triển khai hiện tại; nếu đã đổi domain, cần đối chiếu lại với `backend/.env` và Cloudflare Tunnel.
+Nếu .venv hợp lệ đã tồn tại, bỏ qua bước tạo venv. Chạy từng lệnh đúng thứ tự. MySQL phải bật trước khi chạy web.
 
-## Kiểm thử và chạy lại trên máy khác
+## Địa chỉ local
 
-```powershell
-Push-Location .\backend
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-.\.venv\Scripts\python.exe -m ruff check app tests
-Pop-Location
-npm run lint --prefix .\frontend
-npm test --prefix .\frontend
-npm run build --prefix .\frontend
-```
+- Trang chủ: http://127.0.0.1:8000/
+- Đăng nhập/đăng ký: /login, /register
+- Người dùng: /app; quản trị: /admin
+- Widget test: /widget-test.html
+- API: /docs (development); sức khỏe: /health/ready
 
-Backend API/integration tests cần **MongoDB replica set dành riêng cho test**. Mặc định chúng tìm `mongodb://127.0.0.1:27017/?replicaSet=rs0`; có thể chỉ định `TEST_MONGODB_URI` cho môi trường test tách biệt. Fixture sẽ xóa database `ai_sales_assistant_test` trước và sau mỗi test: tuyệt đối không trỏ `TEST_MONGODB_URI` vào cụm/dữ liệu production nếu chưa kiểm tra quyền và tên database. GitHub Actions tự dựng MongoDB tạm cho bộ test này; máy chạy server không cần Docker.
+Đăng ký tài khoản trước rồi cấp admin bằng `python -m app.cli promote-admin email` qua Python của venv trong backend. Không có tài khoản mẫu hoặc mật khẩu mặc định mới.
+
+Đóng cửa sổ run.bat hoặc Ctrl+C để dừng. Khi sửa React, có thể dùng `deployment/run-local.ps1` cho Vite ở cổng 5173 và API ở cổng 8001; script đọc cùng DATABASE_URL, không tự đổi database.
+
+## Kiểm thử
+
+Chạy `pytest` trong backend mặc định dùng SQLite tạm. MySQL concurrency test cần TEST_DATABASE_URL trỏ database test riêng, tên bắt đầu ccnlthd_test_ hoặc kết thúc _test. Fixture tạo/xóa bảng test; không dùng ccnlthd. Xem [QUALITY.md](QUALITY.md).

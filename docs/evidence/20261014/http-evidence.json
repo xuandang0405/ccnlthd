@@ -1,0 +1,115 @@
+[
+  {
+    "method": "GET",
+    "path": "/health/ready",
+    "status": 200,
+    "request_id": "acceptance-20261014-1",
+    "response": {
+      "status": "ready",
+      "components": {
+        "database": "up",
+        "redis": "sql"
+      }
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/auth/login",
+    "status": 422,
+    "request_id": "acceptance-20261014-3",
+    "response": {
+      "detail": [
+        {
+          "loc": [
+            "body",
+            "email"
+          ],
+          "msg": "value is not a valid email address: An email address must have an @-sign.",
+          "type": "value_error"
+        }
+      ],
+      "message": "Dữ liệu gửi lên không hợp lệ",
+      "error_code": "VALIDATION_ERROR",
+      "status_code": 422,
+      "request_id": "acceptance-20261014-3"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "status": 401,
+    "request_id": "acceptance-20261014-4",
+    "response": {
+      "detail": "Chưa đăng nhập",
+      "message": "Chưa đăng nhập",
+      "error_code": "HTTP_401",
+      "status_code": 401,
+      "request_id": "acceptance-20261014-4"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/auth/me",
+    "status": 200,
+    "request_id": "acceptance-20261014-7",
+    "response": {
+      "id": "8841bb7f-ae82-4402-b53c-b70504c84d53",
+      "email": "acceptance@example.com",
+      "full_name": "Người kiểm thử",
+      "is_super_admin": false,
+      "organizations": [
+        {
+          "id": "3d29b4f0-4cbb-4bde-a247-b30e3b3c070c",
+          "name": "Doanh nghiệp kiểm thử",
+          "role": "BUSINESS_OWNER"
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/summary",
+    "status": 403,
+    "request_id": "acceptance-20261014-8",
+    "response": {
+      "detail": "Chỉ quản trị viên hệ thống được truy cập",
+      "message": "Chỉ quản trị viên hệ thống được truy cập",
+      "error_code": "HTTP_403",
+      "status_code": 403,
+      "request_id": "acceptance-20261014-8"
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/summary",
+    "status": 200,
+    "request_id": "acceptance-20261014-9",
+    "response": {
+      "chatbot_count": 0,
+      "conversation_count": 0,
+      "message_count": 0,
+      "lead_count": 0,
+      "new_lead_count": 0,
+      "document_count": 0,
+      "current_plan": "Miễn phí",
+      "daily_limit": 20,
+      "daily_used": 0,
+      "free_credits_remaining": 20,
+      "purchased_credits_remaining": 0,
+      "chatbot_slots": 1
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/no-such-route",
+    "status": 404,
+    "request_id": "acceptance-20261014-10",
+    "response": {
+      "detail": "Không tìm thấy endpoint",
+      "message": "Không tìm thấy endpoint",
+      "error_code": "HTTP_404",
+      "status_code": 404,
+      "request_id": "acceptance-20261014-10"
+    }
+  }
+]

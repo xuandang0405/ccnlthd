@@ -1,25 +1,33 @@
-# Triển khai Windows hiện tại
+# Triển khai
 
-Luồng một máy: trình duyệt → HTTPS/Cloudflare Tunnel (nếu dùng domain) → FastAPI `127.0.0.1:8000` → MongoDB Atlas. FastAPI phục vụ API và bản build React; document worker và notification worker chạy cùng `run.bat`. Bộ đếm lượt dùng/rate-limit hiện dùng MongoDB. Máy chạy website không cần Docker.
+Đã có cấu hình Docker chạy MySQL, migration, API, worker tài liệu và frontend: xem [DOCKER.md](DOCKER.md). Với Docker, Cloudflare Tunnel trên host trỏ tới cổng 8080; các bước bên dưới mô tả cách chạy không Docker ở cổng 8000.
 
-## Cài lần đầu
+Luồng một máy: trình duyệt → HTTPS/Cloudflare Tunnel (nếu dùng domain) → FastAPI 127.0.0.1:8000 → SQLAlchemy + MySQL. FastAPI phục vụ API và frontend đã build; worker tài liệu chạy cùng run.bat. Thông báo khách hàng mới đọc trực tiếp qua API khi mở web, không có worker gửi tin riêng. Máy chạy website không cần Docker.
 
-Làm theo [INSTALLATION.md](INSTALLATION.md): tạo lại virtual environment trên đúng máy, cài backend, `npm ci` và build frontend, cấu hình `backend/.env`, kiểm tra MongoDB. Đặt `APP_PUBLIC_URL`, `FRONTEND_ORIGIN` và `APP_DOMAIN` đúng domain đang dùng. Trong Cloudflare Tunnel, trỏ hostname tới `http://127.0.0.1:8000`; không chuyển HTTPS trực tiếp vào Uvicorn HTTP. Kiểm tra hostname/DNS/Tunnel thực tế trước khi công bố URL.
+## Chuẩn bị
 
-`run.bat` chỉ chạy server khi cửa sổ mở và dừng các PID cũ của chính dự án trước khi khởi động. Nó không cài package, không build frontend và không tự bật lại sau khi máy khởi động. Sau khi chạy, kiểm tra `/health/live` và `/health/ready`; nếu `ready` trả 503, đọc log trong cửa sổ để xác định MongoDB hoặc rate-limit backend chưa sẵn sàng.
+Làm theo [INSTALLATION.md](INSTALLATION.md) và [hướng dẫn MySQL](../database/HUONG_DAN_MYSQL.md). Cấu hình backend/.env theo domain thật; APP_PUBLIC_URL, FRONTEND_ORIGIN, APP_DOMAIN cần thống nhất. Cloudflare Tunnel trỏ tới http://127.0.0.1:8000, không đưa HTTPS trực tiếp vào Uvicorn HTTP.
 
-## Cập nhật bản triển khai
+Trên server không dùng root không mật khẩu. Tạo tài khoản MySQL riêng, giữ cổng DB trong mạng riêng/localhost. Nếu tự dùng Docker, DATABASE_URL phải là hostname DB mà container truy cập được, không phải 127.0.0.1 của máy Windows; cấu hình này chưa được kiểm thử trong lần chuyển đổi local.
 
-1. Sao lưu MongoDB và thư mục `backend/storage/uploads` ra vị trí an toàn; kiểm tra file sao lưu trước khi thay đổi.
-2. Review thay đổi và kiểm tra CI. Dừng server đang mở bằng Ctrl+C.
-3. Trên máy triển khai, chạy `npm ci --prefix frontend`, `npm run build --prefix frontend`; trong `backend`, chạy `.\.venv\Scripts\python.exe -m pip install -e .` và `python ..\deployment\prepare-mongodb.py` bằng Python của venv.
-4. Mở `run.bat`, xác nhận `health/ready`, đăng nhập bằng tài khoản test và thử một luồng widget. Nếu lỗi, giữ bản code/config và backup trước đó để quay lại; không xóa MongoDB production.
+## Cập nhật
 
-`deployment/deploy-server.ps1` là đường triển khai có backup tự động, nhưng có thao tác dừng tiến trình và ghi backup trong `.runtime`; chỉ dùng khi đã kiểm tra cấu hình và dung lượng đĩa. Không chạy `pytest` trỏ vào Atlas production vì fixture xóa database test.
+1. Sao lưu database và backend/storage/uploads; đối chiếu và cất một bản ngoài máy chủ.
+2. Dừng run.bat, cập nhật source, giữ .env riêng trên máy triển khai.
+3. Cài backend qua venv, npm ci và npm run build. Nếu có migration mới, đọc migration và chạy alembic upgrade head sau khi sao lưu.
+4. Chạy deployment/prepare-mysql.py bằng venv trong backend để kiểm tra schema.
+5. Mở run.bat, kiểm tra health/ready, đăng nhập và thử widget bằng tài khoản test.
 
-## Việc cần xác minh ngoài mã nguồn
+deployment/deploy-server.ps1 vẫn sao lưu và build, nhưng chỉ kiểm tra schema, không tự nhập SQL hoặc xóa dữ liệu. run.bat chỉ khởi động khi cửa sổ mở và không tự cài package/build/migrate. Các URL hiển thị lấy từ APP_PUBLIC_URL.
 
-- Chứng chỉ HTTPS và truy cập từ mạng bên ngoài; hostname Tunnel phải đúng domain đang công bố.
-- Kết nối MongoDB Atlas, IP Access List, backup và diễn tập restore trên database riêng.
-- Gemini key/model/quota; webhook SePay thật; Telegram/SMTP nếu bật.
-- Log và cảnh báo vận hành, chính sách lưu/xóa dữ liệu, kiểm tra bảo mật trước khi phục vụ người dùng thật.
+## Kiểm tra trước công bố
+
+- Schema đúng phiên bản Alembic, MySQL kết nối được.
+- Secret mạnh, CORS/domain đúng; /docs tắt ở production.
+- Quyền user/admin và cách ly tenant.
+- Upload, duyệt tài liệu và xử lý worker.
+- Gemini thật: quota, model và timeout.
+- Webhook SePay thật và đối soát ngân hàng; kiểm tra thông báo khách hàng mới trên web.
+- Sao lưu/phục hồi thử trên database riêng.
+
+Không xóa MongoDB cũ trước khi chốt cách giữ/chuyển dữ liệu. Bản MySQL mới chưa tự nhập dữ liệu MongoDB.

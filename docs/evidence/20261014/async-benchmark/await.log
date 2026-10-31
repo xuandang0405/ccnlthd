@@ -1,0 +1,50 @@
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: D:\QUAN TRỌNG\CCNLTHD\source\backend\benchmarks\async_load.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 10 max VUs, 10m30s max duration (incl. graceful stop):
+              * default: 100 iterations shared among 10 VUs (maxDuration: 10m0s, gracefulStop: 30s)
+
+
+
+  █ THRESHOLDS 
+
+    http_req_failed
+    ✓ 'rate==0' rate=0.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 100     218.372795/s
+    checks_succeeded...: 100.00% 100 out of 100
+    checks_failed......: 0.00%   0 out of 100
+
+    ✓ status 200
+
+    HTTP
+    http_req_duration..............: avg=45.33ms min=35.06ms med=45.93ms max=48.52ms p(90)=48ms    p(95)=48.52ms
+      { expected_response:true }...: avg=45.33ms min=35.06ms med=45.93ms max=48.52ms p(90)=48ms    p(95)=48.52ms
+    http_req_failed................: 0.00%  0 out of 100
+    http_reqs......................: 100    218.372795/s
+
+    EXECUTION
+    iteration_duration.............: avg=45.72ms min=37ms    med=46.36ms max=48.52ms p(90)=48.18ms p(95)=48.52ms
+    iterations.....................: 100    218.372795/s
+
+    NETWORK
+    data_received..................: 16 kB  35 kB/s
+    data_sent......................: 7.6 kB 17 kB/s
+
+
+
+
+running (00m00.5s), 00/10 VUs, 100 complete and 0 interrupted iterations
+default ✓ [ 100% ] 10 VUs  00m00.5s/10m0s  100/100 shared iters

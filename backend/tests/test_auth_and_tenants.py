@@ -1,9 +1,14 @@
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
+from jose import jwt
+from sqlalchemy import select, update
 
-from app.core.mongodb import get_mongo_database, new_document
+from app.core.config import get_settings
+from app.core.records import add_record, make_record
 from app.core.security import digest_token
+from app.models.entities import OrganizationCredit, PasswordResetToken, RefreshSession, User
+from tests.conftest import get_test_database
 
 
 def registration_payload(email: str, company: str) -> dict:
@@ -57,23 +62,56 @@ async def test_register_login_refresh_and_logout(client: AsyncClient):
 
 async def test_session_has_an_absolute_four_hour_limit(client: AsyncClient):
     tokens, _ = await register(client, "expired-session@example.com", "Expired Session")
-    db = get_mongo_database()
-    await db.refresh_sessions.update_one(
-        {"token_digest": digest_token(tokens["refresh_token"])},
-        {
-            "$set": {
-                "created_at": datetime.now(UTC) - timedelta(hours=5),
-                "expires_at": datetime.now(UTC) + timedelta(days=1),
+    db = get_test_database()
+    await db.execute(
+        update(RefreshSession)
+        .where(RefreshSession.token_digest == digest_token(tokens["refresh_token"]))
+        .values(
+            **{
+                **{
+                    "created_at": datetime.now(UTC) - timedelta(hours=5),
+                    "expires_at": datetime.now(UTC) + timedelta(days=1),
+                }
             }
-        },
+        )
     )
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 401
     assert (
-        await client.post(
-            "/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]}
+        await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    ).status_code == 401
+
+
+async def test_logout_revokes_access_and_refresh_tokens(client: AsyncClient):
+    tokens, _ = await register(client, "logout@example.com", "Logout Company")
+    response = await client.post(
+        "/api/v1/auth/logout", json={"refresh_token": tokens["refresh_token"]}
+    )
+    assert response.status_code == 204
+    assert (
+        await client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {tokens['access_token']}"}
         )
     ).status_code == 401
+    assert (
+        await client.post("/api/v1/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    ).status_code == 401
+
+
+async def test_expired_access_token_is_rejected_and_response_hides_password_hash(client):
+    tokens, me = await register(client, "expired-access@example.com", "Expired Access")
+    assert "password_hash" not in me
+    assert "password" not in me
+    settings = get_settings()
+    payload = jwt.get_unverified_claims(tokens["access_token"])
+    payload["exp"] = datetime.now(UTC) - timedelta(minutes=1)
+    expired = jwt.encode(payload, settings.app_secret_key.get_secret_value(), algorithm="HS256")
+    response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {expired}"})
+    assert response.status_code == 401
+    assert response.json()["error_code"] == "HTTP_401"
+    assert response.json()["request_id"] == response.headers["X-Request-ID"]
+
+
 async def test_chatbot_crud_is_tenant_isolated(client: AsyncClient):
     alpha_tokens, alpha_me = await register(client, "alpha@example.com", "Alpha")
     beta_tokens, beta_me = await register(client, "beta@example.com", "Beta")
@@ -135,9 +173,11 @@ async def test_free_chatbot_limit_and_per_bot_credit_allocation(client: AsyncCli
     second = await client.post("/api/v1/chatbots", json={"name": "Bot thứ hai"}, headers=headers)
     assert second.status_code == 402
 
-    db = get_mongo_database()
-    await db.organization_credits.update_one(
-        {"organization_id": organization_id}, {"$inc": {"purchased_remaining": 250}}
+    db = get_test_database()
+    await db.execute(
+        update(OrganizationCredit)
+        .where(OrganizationCredit.organization_id == organization_id)
+        .values(**{"purchased_remaining": OrganizationCredit.purchased_remaining + 250})
     )
     allocated = await client.post(
         f"/api/v1/chatbots/{first.json()['id']}/credits",
@@ -170,16 +210,23 @@ async def test_free_chatbot_limit_and_per_bot_credit_allocation(client: AsyncCli
 async def test_password_reset_token_is_one_time_and_revokes_sessions(client: AsyncClient):
     tokens, _ = await register(client, "reset@example.com", "Reset Company")
     plain_token = "one-time-reset-token-with-enough-entropy-for-test"
-    db = get_mongo_database()
-    user = await db.users.find_one({"email": "reset@example.com"})
+    db = get_test_database()
+    user = await db.scalar(
+        select(User)
+        .where(User.email == "reset@example.com")
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
     assert user is not None
-    await db.password_reset_tokens.insert_one(
-        new_document(
-            user_id=user["_id"],
+    await add_record(
+        db,
+        PasswordResetToken,
+        make_record(
+            user_id=user["id"],
             token_digest=digest_token(plain_token),
             expires_at=datetime.now(UTC) + timedelta(minutes=30),
             used_at=None,
-        )
+        ),
     )
 
     confirmed = await client.post(
